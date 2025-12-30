@@ -98,6 +98,7 @@ $indexUrl = $this->options->index;
     </style>
 </head>
 <body>
+<?php $security = $this->widget('Widget_Security'); $token = $security->getToken($this->request->getRequestUrl()); ?>
 <div class="container-lg">
     <div class="page-header">
         <div>
@@ -135,10 +136,10 @@ $indexUrl = $this->options->index;
                             <?php endif; ?>
                         </div>
                         <div class="provider-actions">
-                            <?php if ($isBound): $offHref = Typecho_Common::url('/connect/toggle?action=off&type='.$type, $indexUrl); $onHref = Typecho_Common::url('/connect/toggle?action=on&type='.$type, $indexUrl); ?>
+                            <?php if ($isBound): $offHref = Typecho_Common::url('/connect/toggle?action=off&type='.$type.'&_security='.$token, $indexUrl); $onHref = Typecho_Common::url('/connect/toggle?action=on&type='.$type.'&_security='.$token, $indexUrl); ?>
                                 <a href="<?php echo $offHref; ?>" class="btn btn-outline-danger" onclick="return confirmOffCustom('<?php echo htmlspecialchars($offHref); ?>','<?php echo htmlspecialchars($meta['title']); ?>')">关闭绑定</a>
                                 <a href="<?php echo $onHref; ?>" class="btn btn-primary">重新绑定</a>
-                            <?php else: $onHref = Typecho_Common::url('/connect/toggle?action=on&type='.$type, $indexUrl); ?>
+                            <?php else: $onHref = Typecho_Common::url('/connect/toggle?action=on&type='.$type.'&_security='.$token, $indexUrl); ?>
                                 <a href="<?php echo $onHref; ?>" class="btn btn-primary" style="background: <?php echo htmlspecialchars($brand); ?>; border-color: <?php echo htmlspecialchars($brand); ?>">开启绑定</a>
                             <?php endif; ?>
                         </div>

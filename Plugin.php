@@ -6,8 +6,8 @@ if (!defined('__TYPECHO_ROOT_DIR__')) {
  *
  * @package TypechoOAuthLogin
  * @author tianlingzi
- * @version 1.0
- * @link https://www.tianlingzi.top
+ * @version 2.0
+ * @link https://www.tianlingzi.top/archives/232/
  *
  */
 class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface

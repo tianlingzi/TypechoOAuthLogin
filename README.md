@@ -5,8 +5,6 @@ typecho第三方OAuth登录插件
 
 由于功能拓展以及后续开发需要，将插件改名为“TypechoOAuthLogin”。
 
-2025.12，关于1.0版更新，对数据表的管理逻辑进行了调整，插件禁用时不再主动删除数据表，以方便插件的再次启用。这对升级插件很重要，避免了要重新绑定第三方登录信息的麻烦。将对数据表的操作转移到了插件的配置页中：单独增加了清空数据表和删除数据表。如果你不再使用本插件，请先点击删除数据表，再禁用插件。
-
 ## 一、功能介绍
  **Typecho互联登录插件，目前已支持的第三方登录：QQ/微信/Github/Msn/Google/新浪微博/豆瓣/点点/淘宝网/百度。**
  后续会根据实际需要继续添加新的第三方接口，欢迎大家一起贡献。
@@ -77,3 +75,4 @@ Google | google | google:APP_KEY,APP_SECRET,Google | https://127.0.0.1/oauth_cal
 在后台的“个人设置”页面中可以看到TypechoOAuthLogin设置，点击“管理第三方登录信息”即可进入。
 
 [1]: https://github.com/tianlingzi/TeConnect
+[2]: https://bing.img.run/about.html

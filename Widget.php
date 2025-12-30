@@ -100,6 +100,13 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
 
             //仅处理来自绑定界面POST提交的数据，第三方回调会跳过
             if ($this->request->isPost()) {
+                // 验证CSRF令牌
+                $security = $this->widget('Widget_Security');
+                if (!$security->validateToken($this->request->get('_security'), $this->request->getRequestUrl())) {
+                    $this->widget('Widget_Notice')->set(array('无效的请求，请刷新页面重试！'), 'error');
+                    $this->response->goBack();
+                }
+                
                 $do = $this->request->get('do');
                 if (!in_array($do, array('bind','reg'))) {
                     throw new Typecho_Widget_Exception("错误数据！");
@@ -193,8 +200,20 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
             //未登录状态且未绑定，控制显示绑定界面
             $custom = $this->options->plugin('TypechoOAuthLogin')->custom;
             if (!$custom && !empty($this->auth['nickname'])) {
+                // 生成随机密码
+                $randomPassword = Typecho_Common::randString(8);
+                
+                // 使用第三方昵称作为用户名和昵称
+                $username = $this->auth['nickname'];
+                
+                // 生成唯一邮箱（如果没有邮箱信息）
+                $mail = $username . '@' . preg_replace('/^www\./', '', parse_url($this->options->siteUrl, PHP_URL_HOST));
+                
                 $dataStruct = array(
-                    'screenName'=>  $this->auth['nickname'],
+                    'name'      =>  $username, // 用户名同时作为登录名
+                    'mail'      =>  $mail,
+                    'screenName'=>  $username, // 用户名同时作为昵称
+                    'password'  =>  Typecho_Common::hash($randomPassword), // 密码加密
                     'created'   =>  $this->options->gmtTime,
                     'group'     =>  'subscriber'
                 );
@@ -254,21 +273,34 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
         $validator->addRule('mail', 'email', _t('电子邮箱格式错误'));
         $validator->addRule('mail', 'maxLength', _t('电子邮箱最多包含200个字符'), 200);
 
-        $validator->addRule('screenName', 'required', _t('必须填写昵称'));
-        $validator->addRule('screenName', 'xssCheck', _t('请不要在昵称中使用特殊字符'));
-        $validator->addRule('screenName', array($this, 'screenNameExists'), _t('昵称已经存在'));
+        $validator->addRule('screenName', 'required', _t('必须填写用户名'));
+        $validator->addRule('screenName', 'xssCheck', _t('请不要在用户名中使用特殊字符'));
+        $validator->addRule('screenName', array($this, 'screenNameExists'), _t('用户名已经存在'));
+        $validator->addRule('screenName', array($this, 'nameExists'), _t('用户名已经被使用'));
 
+        $validator->addRule('password', 'required', _t('必须填写密码'));
+        $validator->addRule('password', 'minLength', _t('密码长度不能小于6个字符'), 6);
+        
+        $validator->addRule('confirmPassword', 'required', _t('必须确认密码'));
 
         /** 截获验证异常 */
-        if ($error = $validator->run($this->request->from('mail', 'screenName', 'url'))) {
+        if ($error = $validator->run($this->request->from('mail', 'screenName', 'password', 'confirmPassword', 'url'))) {
             /** 设置提示信息 */
             $this->widget('Widget_Notice')->set($error);
             $this->response->goBack();
         }
 
+        // 检查两次密码是否一致
+        if ($this->request->password !== $this->request->confirmPassword) {
+            $this->widget('Widget_Notice')->set(array('两次输入的密码不一致!'), 'error');
+            $this->response->goBack();
+        }
+
         $dataStruct = array(
+            'name'      =>  $this->request->screenName, // 用户名同时作为登录名
             'mail'      =>  $this->request->mail,
-            'screenName'=>  $this->request->screenName,
+            'screenName'=>  $this->request->screenName, // 用户名同时作为昵称
+            'password'  =>  Typecho_Common::hash($this->request->password), // 密码加密
             'created'   =>  $this->options->gmtTime,
             'group'     =>  'subscriber'
         );
@@ -338,6 +370,23 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
             ->where('openid = ?', $oauth_user['openid'])
             ->where('type = ?', $type)
             ->limit(1));
+        
+        if (!empty($user)) {
+            // 验证本地账户是否存在
+            $localUser = $this->db->fetchRow($this->db->select()
+                ->from('table.users')
+                ->where('uid = ?', $user['uid'])
+                ->limit(1));
+            
+            if (empty($localUser)) {
+                // 本地账户不存在，删除该第三方账号的绑定信息
+                $this->db->query($this->db->delete('table.oauth_user')
+                    ->where('openid = ?', $oauth_user['openid'])
+                    ->where('type = ?', $type));
+                return 0;
+            }
+        }
+        
         return empty($user)? 0 : $user;
     }
     //使用用户uid登录
@@ -402,6 +451,14 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
         if (!$this->user->hasLogin()) {
             $this->response->redirect(Typecho_Common::url('/', $this->options->index));
         }
+        
+        // 验证CSRF令牌
+        $security = $this->widget('Widget_Security');
+        if (!$security->validateToken($this->request->get('_security'), $this->request->getRequestUrl())) {
+            $this->widget('Widget_Notice')->set(array('无效的请求，请刷新页面重试！'), 'error');
+            $this->response->goBack();
+        }
+        
         $type = strtolower($this->request->get('type'));
         $action = strtolower($this->request->get('action'));
         if (empty($type) || empty($action)) {
@@ -432,6 +489,13 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
      */
     public function clearTable()
     {
+        // 验证CSRF令牌
+        $security = $this->widget('Widget_Security');
+        if (!$security->validateToken($this->request->get('_security'), $this->request->getRequestUrl())) {
+            $this->widget('Widget_Notice')->set(array('无效的请求，请刷新页面重试！'), 'error');
+            $this->response->goBack();
+        }
+        
         // 调用Plugin类的clearTable方法
         $result = TypechoOAuthLogin_Plugin::clearTable();
         $this->widget('Widget_Notice')->set($result, 'success');
@@ -443,6 +507,13 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
      */
     public function removeTable()
     {
+        // 验证CSRF令牌
+        $security = $this->widget('Widget_Security');
+        if (!$security->validateToken($this->request->get('_security'), $this->request->getRequestUrl())) {
+            $this->widget('Widget_Notice')->set(array('无效的请求，请刷新页面重试！'), 'error');
+            $this->response->goBack();
+        }
+        
         // 调用Plugin类的removeTable方法
         $result = TypechoOAuthLogin_Plugin::removeTable();
         $this->widget('Widget_Notice')->set($result, 'success');
