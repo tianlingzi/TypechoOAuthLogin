@@ -6,10 +6,13 @@ if (!defined('__TYPECHO_ROOT_DIR__')) {
  *
  * @package TypechoOAuthLogin
  * @author tianlingzi
- * @version 2.0
+ * @version 3.0
  * @link https://www.tianlingzi.top/archives/232/
  *
  */
+// 设置时区为北京时间，确保所有日期时间处理都使用正确的时区
+date_default_timezone_set('Asia/Shanghai');
+
 class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
 {
     /**

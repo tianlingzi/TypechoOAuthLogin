@@ -19,6 +19,9 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
     public function __construct($request, $response, $params = null)
     {
         parent::__construct($request, $response, $params);
+        // 设置时区为北京时间，确保所有日期时间处理都使用正确的时区
+        date_default_timezone_set('Asia/Shanghai');
+        
         $this->_themeDir = rtrim($this->options->themeFile($this->options->theme), '/') . '/';
 
         /** 初始化皮肤函数 */
@@ -179,7 +182,7 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
             $isConnect = $this->findConnectUser($oauth_user, $this->auth['type']);
             if ($isConnect) {
                 //已经绑定，直接登录
-                $this->useUidLogin($isConnect['uid']);
+                $this->useUidLogin($isConnect['uid'], 0, $this->auth['type']);
                 //提示，并跳转
                 $this->widget('Widget_Notice')->set(array('已成功登陆!'));
                 $redirect = empty($this->referer) ? $this->options->index : $this->referer;
@@ -311,7 +314,7 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
             $this->auth['uuid'] = $insertId;
 
             $this->bindUser($insertId, $oauth_user, $this->auth['type']);
-            $this->useUidLogin($insertId);
+            $this->useUidLogin($insertId, 0, $this->auth['type']);
             return $insertId;
         } else {
             return false;
@@ -383,7 +386,7 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
         return empty($user)? 0 : $user;
     }
     //使用用户uid登录
-    protected function useUidLogin($uid, $expire = 0)
+    protected function useUidLogin($uid, $expire = 0, $type = '')
     {
         $authCode = function_exists('openssl_random_pseudo_bytes') ?
         bin2hex(openssl_random_pseudo_bytes(16)) : sha1(Typecho_Common::randString(20));
@@ -398,10 +401,15 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
             ->expression('logged', 'activated')
             ->rows(array('authCode' => $authCode))
             ->where('uid = ?', $uid));
-        $this->db->query($this->db
-            ->update('table.oauth_user')
-            ->rows(array('datetime' => date("Y-m-d H:i:s", time())))
-            ->where('uid = ?', $uid));
+        
+        //只更新对应type的datetime
+        if (!empty($type)) {
+            $this->db->query($this->db
+                ->update('table.oauth_user')
+                ->rows(array('datetime' => date("Y-m-d H:i:s", time())))
+                ->where('uid = ?', $uid)
+                ->where('type = ?', $type));
+        }
     }
 
     public function render($themeFile)
