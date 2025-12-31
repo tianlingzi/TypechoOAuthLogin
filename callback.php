@@ -254,8 +254,6 @@
             
             <div id="tab1" class="tabcontent">
                 <form action="" method="POST" onsubmit="return validateRegForm()">
-                    <?php $security = $this->widget('Widget_Security'); ?>
-                    <input type="hidden" name="_security" value="<?php echo $security->getToken($this->request->getRequestUrl()); ?>">
                     <div class="form-group">
                         <label for="screenName" class="required">用户名</label>
                         <input type="text" id="screenName" name="screenName" value="<?php if (isset($this->auth['nickname'])){ echo $this->auth['nickname'];}?>" required>
@@ -282,8 +280,6 @@
             
             <div id="tab2" class="tabcontent">
                 <form action="" method="POST">
-                    <?php $security = $this->widget('Widget_Security'); ?>
-                    <input type="hidden" name="_security" value="<?php echo $security->getToken($this->request->getRequestUrl()); ?>">
                     <div class="form-group">
                         <label for="name" class="required">用户名</label>
                         <input type="text" id="name" name="name" required>

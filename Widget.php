@@ -100,13 +100,6 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
 
             //仅处理来自绑定界面POST提交的数据，第三方回调会跳过
             if ($this->request->isPost()) {
-                // 验证CSRF令牌
-                $security = $this->widget('Widget_Security');
-                if (!$security->validateToken($this->request->get('_security'), $this->request->getRequestUrl())) {
-                    $this->widget('Widget_Notice')->set(array('无效的请求，请刷新页面重试！'), 'error');
-                    $this->response->goBack();
-                }
-                
                 $do = $this->request->get('do');
                 if (!in_array($do, array('bind','reg'))) {
                     throw new Typecho_Widget_Exception("错误数据！");
@@ -451,14 +444,6 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
         if (!$this->user->hasLogin()) {
             $this->response->redirect(Typecho_Common::url('/', $this->options->index));
         }
-        
-        // 验证CSRF令牌
-        $security = $this->widget('Widget_Security');
-        if (!$security->validateToken($this->request->get('_security'), $this->request->getRequestUrl())) {
-            $this->widget('Widget_Notice')->set(array('无效的请求，请刷新页面重试！'), 'error');
-            $this->response->goBack();
-        }
-        
         $type = strtolower($this->request->get('type'));
         $action = strtolower($this->request->get('action'));
         if (empty($type) || empty($action)) {
@@ -489,13 +474,6 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
      */
     public function clearTable()
     {
-        // 验证CSRF令牌
-        $security = $this->widget('Widget_Security');
-        if (!$security->validateToken($this->request->get('_security'), $this->request->getRequestUrl())) {
-            $this->widget('Widget_Notice')->set(array('无效的请求，请刷新页面重试！'), 'error');
-            $this->response->goBack();
-        }
-        
         // 调用Plugin类的clearTable方法
         $result = TypechoOAuthLogin_Plugin::clearTable();
         $this->widget('Widget_Notice')->set($result, 'success');
@@ -507,13 +485,6 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
      */
     public function removeTable()
     {
-        // 验证CSRF令牌
-        $security = $this->widget('Widget_Security');
-        if (!$security->validateToken($this->request->get('_security'), $this->request->getRequestUrl())) {
-            $this->widget('Widget_Notice')->set(array('无效的请求，请刷新页面重试！'), 'error');
-            $this->response->goBack();
-        }
-        
         // 调用Plugin类的removeTable方法
         $result = TypechoOAuthLogin_Plugin::removeTable();
         $this->widget('Widget_Notice')->set($result, 'success');
