@@ -496,7 +496,7 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
         // 调用Plugin类的removeTable方法
         $result = TypechoOAuthLogin_Plugin::removeTable();
         $this->widget('Widget_Notice')->set($result, 'success');
-        $this->response->redirect(Typecho_Common::url('options-plugin.php?config=TeConnect', $this->options->adminUrl));
+        $this->response->redirect(Typecho_Common::url('options-plugin.php?config=TypechoOAuthLogin', $this->options->adminUrl));
     }
  
      //登录成功，获取腾讯QQ用户信息
