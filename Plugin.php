@@ -6,7 +6,7 @@ if (!defined('__TYPECHO_ROOT_DIR__')) {
  *
  * @package TypechoOAuthLogin
  * @author tianlingzi
- * @version 3.5
+ * @version 4.0
  * @link https://www.tianlingzi.top/archives/232/
  *
  */
