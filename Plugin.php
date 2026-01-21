@@ -6,7 +6,7 @@ if (!defined('__TYPECHO_ROOT_DIR__')) {
  *
  * @package TypechoOAuthLogin
  * @author tianlingzi
- * @version 3.0
+ * @version 3.5
  * @link https://www.tianlingzi.top/archives/232/
  *
  */
@@ -36,7 +36,7 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
         Helper::addRoute('connect_clear_table', '/connect/clear-table', 'TypechoOAuthLogin_Widget', 'clearTable');
         Helper::addRoute('connect_remove_table', '/connect/remove-table', 'TypechoOAuthLogin_Widget', 'removeTable');
 
-        return _t($info);
+        return $info;
     }
 
     /**
@@ -72,7 +72,7 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
         $config = require_once 'config.php';
         $text = $html ='';
         $text.= "互联配置示例 | 网站回调域 | 平台名称"."\r\n";
-        $text.= "-|-|-"."\r\n";
+        $text.= "-|-|-|"."\r\n";
         $num = 0;
         foreach ($config as $k => $v) {
             $num++;
@@ -135,11 +135,12 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
         );
         // 隐藏文本输入框本体，仅展示描述中的按钮
         $open->input->setAttribute('style', 'display:none');
+        $open->setAttribute('id', 'open_manage');
         // 不再隐藏label，保留空标题以保证描述内容可见
         $form->addInput($open);
         // 隐藏保存按钮，保持极简UI + 按钮美化样式
         echo '<style>
-            .typecho-option .submit{display:none!important;}
+            #open_manage ~ .typecho-option.typecho-option-submit{display:none!important;}
             .teconnect-manage-btn{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(90deg,#1677ff,#69adff);border:0;color:#fff;padding:8px 14px;border-radius:8px;box-shadow:0 6px 12px rgba(22,119,255,.25);transition:transform .15s ease, box-shadow .15s ease;text-decoration:none;}
             .teconnect-manage-btn:hover{transform:translateY(-1px);box-shadow:0 10px 16px rgba(22,119,255,.35);} 
             .teconnect-manage-btn:active{transform:translateY(0);} 
@@ -166,34 +167,45 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
     {
         $db = Typecho_Db::get();
         $prefix = $db->getPrefix();
-        if ("Pdo_Mysql" === $db->getAdapterName() || "Mysql" === $db->getAdapterName()) {
-            $sql = "CREATE TABLE IF NOT EXISTS `{$prefix}oauth_user` (
-                  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-                  `uid` int(10) unsigned  NULL DEFAULT '0' COMMENT '用户ID',
-                  `uuid` int(10) unsigned  NULL DEFAULT '0',
-                  `type` char(32)  NULL DEFAULT '0',
-                  `openid` char(50) NULL DEFAULT '0',
-                  `access_token` text NULL COMMENT '用户对应access_token',
-                  `expires_in` int(10) unsigned NULL DEFAULT '0',
-                  `datetime` timestamp  NULL DEFAULT CURRENT_TIMESTAMP COMMENT '最后登录',
-                  `name` varchar(100) NULL DEFAULT '0',
-                  `nickname` varchar(100) NULL DEFAULT '0',
-                  `gender` tinyint(1) unsigned NULL DEFAULT '0' COMMENT '性别0未知,1男,2女',
-                  `head_img` varchar(255) NULL DEFAULT '0' COMMENT '头像',
-                  `refresh_token` text NULL COMMENT '刷新有效期token',
-                  PRIMARY KEY (`id`),
-                  KEY `uuid` (`uuid`),
-                  KEY `uid` (`uid`),
-                  KEY `type` (`type`),
-                  KEY `openid` (`openid`)
-                ) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci AUTO_INCREMENT=1";
-            $db->query($sql);
-        } else {
+        // 仅支持MySQL 适配器
+        if (!in_array($db->getAdapterName(), array('Pdo_Mysql', 'Mysql'))) {
             throw new Typecho_Plugin_Exception(_t('对不起, 本插件仅支持MySQL数据库。'));
         }
-        return "数据表oauth_user安装成功！";
+        try {
+            // 优化默认值和排序规则，适配低版本 MySQL
+            $sql = "CREATE TABLE IF NOT EXISTS `{$prefix}oauth_user` (
+                          `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+                          `uid` int(10) unsigned NULL DEFAULT 0 COMMENT '用户ID',
+                          `uuid` int(10) unsigned NULL DEFAULT 0,
+                          `type` char(32) NULL DEFAULT '' COMMENT '第三方登录类型',
+                          `openid` char(50) NULL DEFAULT '' COMMENT '第三方登录唯一标识',
+                          `access_token` text NULL COMMENT '用户对应access_token',
+                          `expires_in` int(10) unsigned NULL DEFAULT 0 COMMENT 'token有效期',
+                          `datetime` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '最后登录',
+                          `name` varchar(100) NULL DEFAULT '' COMMENT '用户名',
+                          `nickname` varchar(100) NULL DEFAULT '' COMMENT '昵称',
+                          `gender` tinyint(1) unsigned NULL DEFAULT 0 COMMENT '性别0未知,1男,2女',
+                          `head_img` varchar(255) NULL DEFAULT '' COMMENT '头像',
+                          `refresh_token` text NULL COMMENT '刷新有效期token',
+                          PRIMARY KEY (`id`),
+                          KEY `uuid` (`uuid`),
+                          KEY `uid` (`uid`),
+                          KEY `type` (`type`),
+                          KEY `openid` (`openid`)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='第三方登录用户表';
+                        ";
+            // 执行建表语句
+            $db->query($sql, Typecho_Db::WRITE);
+            return "数据表oauth_user安装成功！";
+        } catch (Typecho_Db_Exception $e) {
+            // 捕获数据库异常，返回具体错误信息
+            throw new Typecho_Plugin_Exception(_t('创建数据表失败：%s', $e->getMessage()));
+        } catch (Exception $e) {
+            // 捕获其他异常
+            throw new Typecho_Plugin_Exception(_t('系统错误：%s', $e->getMessage()));
+        }
     }
-
+    
     //清除数据表（删除数据+重建表）
     public static function clearTable()
     {
@@ -203,31 +215,42 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
             //先删除表
             $db->query("DROP TABLE IF EXISTS `" . $prefix . "oauth_user`", Typecho_Db::WRITE);
             //再重建表
-            if ("Pdo_Mysql" === $db->getAdapterName() || "Mysql" === $db->getAdapterName()) {
+            // 仅支持MySQL 适配器
+            if (!in_array($db->getAdapterName(), array('Pdo_Mysql', 'Mysql'))) {
+                throw new Typecho_Plugin_Exception(_t('对不起, 本插件仅支持MySQL数据库。'));
+            }
+            try {
+                // 优化默认值和排序规则，适配低版本 MySQL
                 $sql = "CREATE TABLE IF NOT EXISTS `{$prefix}oauth_user` (
-                      `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-                      `uid` int(10) unsigned  NULL DEFAULT '0' COMMENT '用户ID',
-                      `uuid` int(10) unsigned  NULL DEFAULT '0',
-                      `type` char(32)  NULL DEFAULT '0',
-                      `openid` char(50) NULL DEFAULT '0',
-                      `access_token` text NULL COMMENT '用户对应access_token',
-                      `expires_in` int(10) unsigned NULL DEFAULT '0',
-                      `datetime` timestamp  NULL DEFAULT CURRENT_TIMESTAMP COMMENT '最后登录',
-                      `name` varchar(100) NULL DEFAULT '0',
-                      `nickname` varchar(100) NULL DEFAULT '0',
-                      `gender` tinyint(1) unsigned NULL DEFAULT '0' COMMENT '性别0未知,1男,2女',
-                      `head_img` varchar(255) NULL DEFAULT '0' COMMENT '头像',
-                      `refresh_token` text NULL COMMENT '刷新有效期token',
-                      PRIMARY KEY (`id`),
-                      KEY `uuid` (`uuid`),
-                      KEY `uid` (`uid`),
-                      KEY `type` (`type`),
-                      KEY `openid` (`openid`)
-                    ) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci AUTO_INCREMENT=1";
-                $db->query($sql);
+                          `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+                          `uid` int(10) unsigned NULL DEFAULT 0 COMMENT '用户ID',
+                          `uuid` int(10) unsigned NULL DEFAULT 0,
+                          `type` char(32) NULL DEFAULT '' COMMENT '第三方登录类型',
+                          `openid` char(50) NULL DEFAULT '' COMMENT '第三方登录唯一标识',
+                          `access_token` text NULL COMMENT '用户对应access_token',
+                          `expires_in` int(10) unsigned NULL DEFAULT 0 COMMENT 'token有效期',
+                          `datetime` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '最后登录',
+                          `name` varchar(100) NULL DEFAULT '' COMMENT '用户名',
+                          `nickname` varchar(100) NULL DEFAULT '' COMMENT '昵称',
+                          `gender` tinyint(1) unsigned NULL DEFAULT 0 COMMENT '性别0未知,1男,2女',
+                          `head_img` varchar(255) NULL DEFAULT '' COMMENT '头像',
+                          `refresh_token` text NULL COMMENT '刷新有效期token',
+                          PRIMARY KEY (`id`),
+                          KEY `uuid` (`uuid`),
+                          KEY `uid` (`uid`),
+                          KEY `type` (`type`),
+                          KEY `openid` (`openid`)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='第三方登录用户表';
+                        ";
+                // 执行建表语句
+                $db->query($sql, Typecho_Db::WRITE);
                 return "清除oauth_user表数据成功！";
-            } else {
-                return "对不起, 本插件仅支持MySQL数据库。";
+            } catch (Typecho_Db_Exception $e) {
+                // 捕获数据库异常，返回具体错误信息
+                throw new Typecho_Plugin_Exception(_t('创建数据表失败：%s', $e->getMessage()));
+            } catch (Exception $e) {
+                // 捕获其他异常
+                throw new Typecho_Plugin_Exception(_t('系统错误：%s', $e->getMessage()));
             }
         } catch (Typecho_Exception $e) {
             return "清除oauth_user表数据失败！";

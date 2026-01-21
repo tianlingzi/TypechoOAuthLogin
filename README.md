@@ -6,7 +6,7 @@ typecho第三方OAuth登录插件
 由于功能拓展以及后续开发需要，将插件改名为“TypechoOAuthLogin”。
 
 ## 一、功能介绍
- **Typecho互联登录插件，目前已支持的第三方登录：QQ/微信/Github/Msn/Google/新浪微博/豆瓣/点点/淘宝网/百度。**
+ **Typecho互联登录插件，目前已支持的第三方登录：QQ/微信/Github/Msn/Google/新浪微博/豆瓣/点点/淘宝网/百度/自部署的keycloak。**
  后续会根据实际需要继续添加新的第三方接口，欢迎大家一起贡献。
  如使用过程中遇到问题，可到这篇文章下留言，我会尽快解决。 https://www.tianlingzi.top/archives/232/
 
@@ -52,6 +52,7 @@ Google | google | google:APP_KEY,APP_SECRET,Google | https://127.0.0.1/oauth_cal
 点点 | diandian | diandian:APP_KEY,APP_SECRET,点点 | https://127.0.0.1/oauth_callback?type=diandian
 淘宝网 | taobao | taobao:APP_KEY,APP_SECRET,淘宝网 | https://127.0.0.1/oauth_callback?type=taobao
 百度 | baidu | baidu:APP_KEY,APP_SECRET,百度 | https://127.0.0.1/oauth_callback?type=baidu
+Keycloak | keycloak | keycloak:APP_KEY,APP_SECRET,Keycloak | https://127.0.0.1/oauth_callback?type=keycloak
 
 ### 1：后台互联配置
 具体格式为：`type:appid,appkey,title`，注释：
@@ -64,6 +65,8 @@ Google | google | google:APP_KEY,APP_SECRET,Google | https://127.0.0.1/oauth_cal
 例如：`qq:APP_KEY,APP_SECRET,腾讯QQ`
 改成：`qq:123456789,47sa12f8s7df7sd877ji75s78sdfd,腾讯QQ`
 粘贴到后台`互联配置`，即完成了腾讯QQ登录的配置，其他类型同理！
+
+对于keycloak，需要在KeycloakSDK中设置自己的Keycloak服务器地址和Realm名称。
 
 ### 2：网站回调域配置
 您可以复制对应的`配置示例`，把`127.0.0.1`改成您的域名，填写到第三方开发平台的网站回调域设置中，即可完成配置！

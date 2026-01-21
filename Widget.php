@@ -496,7 +496,7 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
         // 调用Plugin类的removeTable方法
         $result = TypechoOAuthLogin_Plugin::removeTable();
         $this->widget('Widget_Notice')->set($result, 'success');
-        $this->response->redirect(Typecho_Common::url('options-plugin.php?config=TeConnect', $this->options->adminUrl));
+        $this->response->redirect(Typecho_Common::url('options-plugin.php?config=TypechoOAuthLogin', $this->options->adminUrl));
     }
  
      //登录成功，获取腾讯QQ用户信息
@@ -673,5 +673,44 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
         } else {
             //throw_exception("获取百度用户信息失败：{$data['error_msg']}");
         }
+    }
+    
+    //登录成功，获取Keycloak用户信息
+    public function keycloak($token)
+    {
+        $keycloak = ThinkOauth::getInstance('keycloak', $token);
+        $data = $keycloak->getUserInfo();
+        
+        // 确保返回有效的用户信息数组
+        $userInfo = array(
+            'name' => '',
+            'nickname' => '',
+            'head_img' => '',
+            'gender' => 0
+        );
+        
+        if (!empty($data['sub'])) {
+            $userInfo['name'] = isset($data['preferred_username']) ? $data['preferred_username'] : $data['sub'];
+            $userInfo['nickname'] = isset($data['name']) ? $data['name'] : $userInfo['name'];
+            $userInfo['head_img'] = isset($data['picture']) ? $data['picture'] : '';
+            
+            // 处理性别
+            $gender = 0;
+            if (isset($data['gender'])) {
+                if (strtolower($data['gender']) == 'male') {
+                    $gender = 1;
+                } elseif (strtolower($data['gender']) == 'female') {
+                    $gender = 2;
+                }
+            }
+            $userInfo['gender'] = $gender;
+        } else {
+            // 如果没有获取到用户信息，使用openid作为用户名和昵称
+            $userInfo['name'] = $token['openid'];
+            $userInfo['nickname'] = $token['openid'];
+            $this->widget('Widget_Notice')->set(array("获取Keycloak用户信息失败，使用openid作为用户名"), 'error');
+        }
+        
+        return $userInfo;
     }
 }
