@@ -72,12 +72,13 @@ return array(
         'APP_SECRET'    => '', //应用注册成功后分配的KEY
         'CALLBACK'      => URL_CALLBACK . 'baidu',
     ),
-    //Keycloak配置
-    'THINK_SDK_KEYCLOAK' => array(
-        'NAME'      => 'Keycloak',
+    //通用OAuth 2.0/OIDC配置
+    'THINK_SDK_CUSTOMLOGIN' => array(
+        'NAME'      => 'Custom Login',
         'APP_KEY'       => '', //应用注册成功后分配的 Client ID
         'APP_SECRET'    => '', //应用注册成功后分配的 Client Secret
-        'CALLBACK'      => URL_CALLBACK . 'keycloak',
+        'CALLBACK'      => URL_CALLBACK . 'customlogin',
         'AUTHORIZE'     => 'scope=openid profile email', //授权范围
     ),
+
 );

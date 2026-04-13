@@ -2,38 +2,36 @@
 // +----------------------------------------------------------------------
 // | TypechoOAuthLogin Plugin
 // +----------------------------------------------------------------------
-// | KeycloakSDK.class.php 2026-01-21
+// | CustomloginSDK.class.php 2026-04-13
 // +----------------------------------------------------------------------
 
-class KeycloakSDK extends ThinkOauth
+class CustomloginSDK extends ThinkOauth
 {
     /**
-     * Keycloak OpenID Connect 发现文档URL
-     * 注意：用户需要根据自己的Keycloak服务器情况自行更改
+     * OpenID Connect 发现文档URL
+     * 用户可以修改为自己的OpenID Connect提供商的发现端点
+     * 例如: https://your-oidc-provider.com/.well-known/openid-configuration
      * @var string
      */
-    protected $OpenIDConfiguration = 'https://YourKeycloakServer/realms/YourRealm/.well-known/openid-configuration';
-    
+    protected $OpenIDConfiguration = 'https://your-oidc-provider.com/.well-known/openid-configuration';
+
     /**
      * 获取requestCode的api接口
-     * 注意：用户需要根据自己的Keycloak服务器情况自行更改
      * @var string
      */
-    protected $GetRequestCodeURL = 'https://YourKeycloakServer/realms/YourRealm/protocol/openid-connect/auth';  
+    protected $GetRequestCodeURL = '';
 
     /**
      * 获取access_token的api接口
-     * 注意：用户需要根据自己的Keycloak服务器情况自行更改
      * @var string
      */
-    protected $GetAccessTokenURL = 'https://YourKeycloakServer/realms/YourRealm/protocol/openid-connect/token'; 
+    protected $GetAccessTokenURL = '';
 
     /**
      * 获取用户信息的api接口
-     * 注意：用户需要根据自己的Keycloak服务器情况自行更改
      * @var string
      */
-    protected $GetUserInfoURL = 'https://YourKeycloakServer/realms/YourRealm/protocol/openid-connect/userinfo';
+    protected $GetUserInfoURL = '';
 
     /**
      * 获取request_code的额外参数,可在配置中修改 URL查询字符串格式
@@ -48,24 +46,71 @@ class KeycloakSDK extends ThinkOauth
     protected $ApiBase = '';
     
     /**
-     * 构造函数
+     * 构造函数，初始化OpenID Connect配置
      * @param array $token
      */
     public function __construct($token = null)
     {
         parent::__construct($token);
+        // 获取OpenID Connect配置
+        try {
+            $this->fetchOpenIDConfig();
+        } catch (Exception $e) {
+            // 记录错误信息到PHP日志
+            error_log('CustomloginSDK初始化失败: ' . $e->getMessage());
+            // 重新抛出异常，让上层处理
+            throw new Exception('Custom Login SDK初始化失败: ' . $e->getMessage());
+        }
     }
-
+    
+    /**
+     * 获取OpenID Connect配置
+     */
+    protected function fetchOpenIDConfig()
+    {
+        // 从OpenID Connect发现文档获取配置
+        $config = $this->http($this->OpenIDConfiguration, array(), 'GET');
+        
+        if (empty($config)) {
+            throw new Exception('获取OpenID Connect配置失败: 服务器返回空数据');
+        }
+        
+        $config = json_decode($config, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new Exception('获取OpenID Connect配置失败: JSON解析错误 - ' . json_last_error_msg());
+        }
+        
+        if (empty($config)) {
+            throw new Exception('获取OpenID Connect配置失败: 返回数据为空数组');
+        }
+        
+        // 检查必要的配置字段
+        $requiredFields = array('authorization_endpoint', 'token_endpoint', 'userinfo_endpoint');
+        foreach ($requiredFields as $field) {
+            if (!isset($config[$field])) {
+                throw new Exception('获取OpenID Connect配置失败: 缺少必要字段 - ' . $field);
+            }
+        }
+        
+        $this->GetRequestCodeURL = $config['authorization_endpoint'];
+        $this->GetAccessTokenURL = $config['token_endpoint'];
+        $this->GetUserInfoURL = $config['userinfo_endpoint'];
+        if (isset($config['issuer'])) {
+            $this->ApiBase = $config['issuer'];
+        }
+    }
+    
     /**
      * 组装接口调用参数 并调用接口
-     * @param  string $api    Keycloak API
+     * @param  string $api    API
      * @param  string $param  调用API的额外参数
      * @param  string $method HTTP请求方法 默认为GET
      * @return json
      */
     public function call($api, $param = '', $method = 'GET', $multi = false)
     {
-        /* Keycloak调用公共参数 */
+        /* 调用公共参数 */
         $params = array(
             'access_token' => $this->Token['access_token'],
         );
@@ -76,7 +121,7 @@ class KeycloakSDK extends ThinkOauth
     }
     
     /**
-     * 获取Keycloak用户信息
+     * 获取用户信息
      * @return array 用户信息
      */
     public function getUserInfo()
@@ -91,11 +136,11 @@ class KeycloakSDK extends ThinkOauth
         
         // 确保返回的数据格式正确
         if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new Exception('获取Keycloak用户信息失败: JSON解析错误 - ' . json_last_error_msg());
+            throw new Exception('获取用户信息失败: JSON解析错误 - ' . json_last_error_msg());
         }
         
         if (empty($userInfo)) {
-            throw new Exception('获取Keycloak用户信息失败: 返回数据为空');
+            throw new Exception('获取用户信息失败: 返回数据为空');
         }
         
         return $userInfo;
@@ -138,13 +183,13 @@ class KeycloakSDK extends ThinkOauth
             
             // 如果还是失败，记录错误并继续，后续会通过userinfo获取
             if (empty($openid)) {
-                error_log('KeycloakSDK: 无法从JWT中解析openid');
+                error_log('CustomloginSDK: 无法从JWT中解析openid');
             }
             
             $data['openid'] = $openid;
             return $data;
         } else {
-            throw new Exception('获取Keycloak ACCESS_TOKEN 失败：' . $result);
+            throw new Exception('获取ACCESS_TOKEN 失败：' . $result);
         }
     }
     

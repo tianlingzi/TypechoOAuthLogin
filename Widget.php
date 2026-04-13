@@ -138,27 +138,46 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
             $type = $this->auth['type'] = strtolower($this->auth['type']);
             //加载ThinkOauth类并实例化一个对象
             require_once 'ThinkOauth.php';
-            $sdk = ThinkOauth::getInstance($type);
-            //请求接口(返回值包含openid)
-            $token = $sdk->getAccessToken($type, $code);
-            if (is_array($token)) {
-                //获取第三方账号数据
-                $user_info = $this->$type($token);
-                $oauth_user = array(
-                    'uid'           =>  0,
-                    'openid'        =>  $token['openid'],
-                    'access_token'  =>  $token['access_token'],
-                    'expires_in'    =>  isset($token['expires_in']) ? $this->options->gmtTime+$token['expires_in']: 0,
-                    'gender'        =>  isset($user_info['gender']) ? $user_info['gender'] : 0,
-                    'head_img'      =>  $user_info['head_img'],
-                    'name'          =>  $user_info['name'],
-                    'nickname'      =>  $user_info['nickname'],
-                    'type'          =>  $type,
-                );
-                //获取openid
-                $this->auth['openid'] = $token['openid'];
-                $this->auth['nickname'] = $user_info['nickname'];
-            } else {
+            try {
+                $sdk = ThinkOauth::getInstance($type);
+                //请求接口(返回值包含openid)
+                $token = $sdk->getAccessToken($type, $code);
+                if (is_array($token)) {
+                    //获取第三方账号数据
+                    $user_info = $this->$type($token);
+                    
+                    // 确保user_info是数组
+                    if (!is_array($user_info)) {
+                        $user_info = array(
+                            'name' => $token['openid'],
+                            'nickname' => $token['openid'],
+                            'head_img' => '',
+                            'gender' => 0
+                        );
+                    }
+                    
+                    $oauth_user = array(
+                        'uid'           =>  0,
+                        'openid'        =>  $token['openid'],
+                        'access_token'  =>  $token['access_token'],
+                        'expires_in'    =>  isset($token['expires_in']) ? $this->options->gmtTime+$token['expires_in']: 0,
+                        'gender'        =>  isset($user_info['gender']) ? $user_info['gender'] : 0,
+                        'head_img'      =>  isset($user_info['head_img']) ? $user_info['head_img'] : '',
+                        'name'          =>  isset($user_info['name']) ? $user_info['name'] : $token['openid'],
+                        'nickname'      =>  isset($user_info['nickname']) ? $user_info['nickname'] : $token['openid'],
+                        'type'          =>  $type,
+                    );
+                    //获取openid
+                    $this->auth['openid'] = $token['openid'];
+                    $this->auth['nickname'] = isset($user_info['nickname']) ? $user_info['nickname'] : $token['openid'];
+                } else {
+                    $this->response->redirect($this->options->index);
+                }
+            } catch (Exception $e) {
+                // 记录错误信息
+                error_log('OAuth登录错误: ' . $e->getMessage());
+                // 显示错误提示并跳转
+                $this->widget('Widget_Notice')->set(array('登录失败: ' . $e->getMessage()), 'error');
                 $this->response->redirect($this->options->index);
             }
         }
@@ -325,45 +344,67 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
     // 同一用户，可以绑定不同的登录方式！但是，同类型的第三方账号仅可绑定一个！
     protected function bindUser($uid, $oauth_user, $type)
     {
-        $oauth_user['uid'] = $uid;
-        if (isset($this->auth['uuid'])) {
-            $oauth_user['uuid'] = $this->auth['uuid'];
-        }
-        //查询当前登录的账号是否绑定？
-        $connect = $this->db->fetchRow($this->db->select()
-            ->from('table.oauth_user')
-            ->where('uid = ?', $uid)
-            ->where('type = ?', $type)
-            ->limit(1));
-        if (empty($connect)) {
-            //未绑定
-            $oauthRow = $this->findConnectUser($oauth_user, $type);
-            if ($oauthRow) {
-                //已存在第三方账号，更新绑定关系
-                $this->db->query($this->db
-                ->update('table.oauth_user')
-                ->rows(array('uid' => $uid))
-                ->where('openid = ?', $oauth_user['openid'])
-                ->where('type = ?', $type));
-            } else {
-                //未绑定，插入数据并绑定
-                $this->db->query($this->db->insert('table.oauth_user')->rows($oauth_user));
+        try {
+            // 确保数据格式正确
+            $oauth_user['uid'] = intval($uid);
+            if (isset($this->auth['uuid'])) {
+                $oauth_user['uuid'] = intval($this->auth['uuid']);
             }
-        } else {
-            //已绑定，判断更新条件，避免绑定错乱（同类型的第三方账号，用户只能绑定一个）
-            if ($connect['openid'] == $oauth_user['openid']) {
-                ###更新资料tudo
+            $oauth_user['gender'] = intval($oauth_user['gender']);
+            $oauth_user['expires_in'] = intval($oauth_user['expires_in']);
+            
+            // 确保字符串长度符合数据库限制
+            $oauth_user['type'] = substr($oauth_user['type'], 0, 32);
+            $oauth_user['openid'] = substr($oauth_user['openid'], 0, 50);
+            $oauth_user['name'] = substr($oauth_user['name'], 0, 100);
+            $oauth_user['nickname'] = substr($oauth_user['nickname'], 0, 100);
+            $oauth_user['head_img'] = substr($oauth_user['head_img'], 0, 255);
+            
+            //查询当前登录的账号是否绑定？
+            $connect = $this->db->fetchRow($this->db->select()
+                ->from('table.oauth_user')
+                ->where('uid = ?', $uid)
+                ->where('type = ?', $type)
+                ->limit(1));
+            if (empty($connect)) {
+                //未绑定
+                $oauthRow = $this->findConnectUser($oauth_user, $type);
+                if ($oauthRow) {
+                    //已存在第三方账号，更新绑定关系
+                    $this->db->query($this->db
+                    ->update('table.oauth_user')
+                    ->rows(array('uid' => $uid))
+                    ->where('openid = ?', $oauth_user['openid'])
+                    ->where('type = ?', $type));
+                } else {
+                    //未绑定，插入数据并绑定
+                    $this->db->query($this->db->insert('table.oauth_user')->rows($oauth_user));
+                }
             } else {
-                ###换绑tudo
+                //已绑定，判断更新条件，避免绑定错乱（同类型的第三方账号，用户只能绑定一个）
+                if ($connect['openid'] == $oauth_user['openid']) {
+                    ###更新资料tudo
+                } else {
+                    ###换绑tudo
+                }
             }
+        } catch (Exception $e) {
+            // 记录错误信息
+            error_log('绑定用户失败: ' . $e->getMessage());
+            // 抛出异常，让上层处理
+            throw new Exception('绑定用户失败: ' . $e->getMessage());
         }
     }
     //查找第三方账号
     protected function findConnectUser($oauth_user, $type)
     {
+        // 确保使用与存储时相同的截断值进行查询
+        $openid = substr($oauth_user['openid'], 0, 50);
+        $type = substr($type, 0, 32);
+        
         $user = $this->db->fetchRow($this->db->select()
             ->from('table.oauth_user')
-            ->where('openid = ?', $oauth_user['openid'])
+            ->where('openid = ?', $openid)
             ->where('type = ?', $type)
             ->limit(1));
         
@@ -675,11 +716,11 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
         }
     }
     
-    //登录成功，获取Keycloak用户信息
-    public function keycloak($token)
+    //登录成功，获取Custom Login用户信息
+    public function customlogin($token)
     {
-        $keycloak = ThinkOauth::getInstance('keycloak', $token);
-        $data = $keycloak->getUserInfo();
+        $customlogin = ThinkOauth::getInstance('customlogin', $token);
+        $data = $customlogin->getUserInfo();
         
         // 确保返回有效的用户信息数组
         $userInfo = array(
@@ -708,9 +749,10 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
             // 如果没有获取到用户信息，使用openid作为用户名和昵称
             $userInfo['name'] = $token['openid'];
             $userInfo['nickname'] = $token['openid'];
-            $this->widget('Widget_Notice')->set(array("获取Keycloak用户信息失败，使用openid作为用户名"), 'error');
+            $this->widget('Widget_Notice')->set(array("获取Custom Login用户信息失败，使用openid作为用户名"), 'error');
         }
         
         return $userInfo;
     }
+
 }

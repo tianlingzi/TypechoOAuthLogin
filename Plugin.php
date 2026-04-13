@@ -2,12 +2,12 @@
 if (!defined('__TYPECHO_ROOT_DIR__')) {
     exit;
 }/**
- * Typecho OAuth登录插件，已支持的第三方登录：QQ/微信/Github/Msn/Google/新浪微博/豆瓣/点点/淘宝网/百度
+ * Typecho OAuth登录插件，已支持的第三方登录：QQ/微信/Github/Msn/Google/新浪微博/豆瓣/点点/淘宝网/百度/通用OpenID Connect登录
  *
  * @package TypechoOAuthLogin
  * @author tianlingzi
- * @version 4.0
- * @link https://www.tianlingzi.top/archives/232/
+ * @version 4.2
+ * @link https://www.tianlingzi.top/archives/262/
  *
  */
 // 设置时区为北京时间，确保所有日期时间处理都使用正确的时区
@@ -71,14 +71,19 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
     {
         $config = require_once 'config.php';
         $text = $html ='';
-        $text.= "互联配置示例 | 网站回调域 | 平台名称"."\r\n";
-        $text.= "-|-|-|"."\r\n";
-        $num = 0;
-        foreach ($config as $k => $v) {
-            $num++;
-            $type = strtolower(substr($k, 10));
-            $text.= $type.':APP_KEY,APP_SECRET,'.$v['NAME'].' | '.$v['CALLBACK'].' | '.$v['NAME']."\r\n";
-        }
+        $text.= "互联配置示例 | 网站回调域 | 平台名称\r\n";
+        $text.= "qq:APP_KEY,APP_SECRET,腾讯QQ | https://www.tianlingzi.top/oauth_callback?type=qq | 腾讯QQ\r\n";
+        $text.= "wechat:APP_KEY,APP_SECRET,微信 | https://www.tianlingzi.top/oauth_callback?type=wechat | 微信\r\n";
+        $text.= "github:APP_KEY,APP_SECRET,Github | https://www.tianlingzi.top/oauth_callback?type=github | Github\r\n";
+        $text.= "msn:APP_KEY,APP_SECRET,MSN | https://www.tianlingzi.top/oauth_callback?type=msn | MSN\r\n";
+        $text.= "google:APP_KEY,APP_SECRET,Google | https://www.tianlingzi.top/oauth_callback?type=google | Google\r\n";
+        $text.= "sina:APP_KEY,APP_SECRET,新浪微博 | https://www.tianlingzi.top/oauth_callback?type=sina | 新浪微博\r\n";
+        $text.= "douban:APP_KEY,APP_SECRET,豆瓣 | https://www.tianlingzi.top/oauth_callback?type=douban | 豆瓣\r\n";
+        $text.= "diandian:APP_KEY,APP_SECRET,点点 | https://www.tianlingzi.top/oauth_callback?type=diandian | 点点\r\n";
+        $text.= "taobao:APP_KEY,APP_SECRET,淘宝网 | https://www.tianlingzi.top/oauth_callback?type=taobao | 淘宝网\r\n";
+        $text.= "baidu:APP_KEY,APP_SECRET,百度 | https://www.tianlingzi.top/oauth_callback?type=baidu | 百度\r\n";
+        $text.= "customlogin:APP_KEY,APP_SECRET,Custom Login | https://www.tianlingzi.top/oauth_callback?type=customlogin | Custom Login\r\n";
+        $num = 11;
         $html = Markdown::convert($text);
 
         //互联配置
@@ -91,13 +96,47 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
         $custom = new Typecho_Widget_Helper_Form_Element_Radio('custom', array(1=>_t('是'),0=>'否'), 1, _t('是否需要完善资料'), _t('用户使用社会化登录后，是否需要完善昵称、邮箱等信息；选择不需要完善资料则直接使用获取到的昵称。'));
         $form->addInput($custom);
         
+        //添加按钮样式
+        echo '<style>
+            .oauth-button {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 8px 16px;
+                border-radius: 8px;
+                text-decoration: none;
+                font-weight: 500;
+                transition: all 0.3s ease;
+                border: none;
+                cursor: pointer;
+            }
+            .oauth-button:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            }
+            .oauth-button.clear {
+                background: linear-gradient(90deg, #1677ff, #69adff);
+                color: white;
+            }
+            .oauth-button.clear:hover {
+                box-shadow: 0 6px 16px rgba(22,119,255,0.35);
+            }
+            .oauth-button.remove {
+                background: linear-gradient(90deg, #ff4d4f, #ff7875);
+                color: white;
+            }
+            .oauth-button.remove:hover {
+                box-shadow: 0 6px 16px rgba(255,77,79,0.35);
+            }
+        </style>';
+        
         //添加清除和删除按钮，使用HTML直接输出
         echo '<div class="typecho-option">';
         echo '<div class="typecho-control-group">';
         echo '<div class="description">' . _t('警告：此操作将删除oauth_user表中的所有数据并重建表结构，所有用户绑定的第三方登录信息将丢失，但插件仍可继续使用！请谨慎操作。') . '</div>';
         echo '<div class="typecho-control">';
         $clearUrl = Typecho_Common::url('/connect/clear-table', Typecho_Widget::Widget('Widget_Options')->index);
-        echo '<a href="' . $clearUrl . '" class="typecho-primary" onclick="return confirm(\'确定要清除数据表数据吗？此操作不可恢复！\');">' . _t('清除数据表') . '</a>';
+        echo '<a href="' . $clearUrl . '" class="oauth-button clear" onclick="return confirm(\'确定要清除数据表数据吗？此操作不可恢复！\');">' . _t('清除数据表') . '</a>';
         echo '</div>';
         echo '</div>';
         echo '</div>';
@@ -107,7 +146,7 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
         echo '<div class="description">' . _t('警告：此操作将直接删除oauth_user数据表，所有用户绑定的第三方登录信息将丢失，且插件后续无法正常使用！请谨慎操作。') . '</div>';
         echo '<div class="typecho-control">';
         $removeUrl = Typecho_Common::url('/connect/remove-table', Typecho_Widget::Widget('Widget_Options')->index);
-        echo '<a href="' . $removeUrl . '" class="typecho-danger" onclick="return confirm(\'确定要删除数据表吗？此操作不可恢复，且插件将无法继续使用！\');">' . _t('删除数据表') . '</a>';
+        echo '<a href="' . $removeUrl . '" class="oauth-button remove" onclick="return confirm(\'确定要删除数据表吗？此操作不可恢复，且插件将无法继续使用！\');">' . _t('删除数据表') . '</a>';
         echo '</div>';
         echo '</div>';
         echo '</div>';
