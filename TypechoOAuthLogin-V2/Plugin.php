@@ -7,7 +7,7 @@ if (!defined('__TYPECHO_ROOT_DIR__')) {
  * @package TypechoOAuthLogin
  * @author tianlingzi
  * @version 2.0.0
- * @link https://www.tianlingzi.top/archives/262/
+ * @link https://www.tianlingzi.top/archives/273/
  *
  */
 date_default_timezone_set('Asia/Shanghai');

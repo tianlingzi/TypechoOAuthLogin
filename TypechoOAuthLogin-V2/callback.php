@@ -15,8 +15,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- 使用CDN引入Bootstrap CSS -->
-    <link rel="stylesheet" href="./usr/plugins/TypechoOAuthLogin/else/bootstrap.min.css">
+    <link rel="stylesheet" href="/usr/plugins/TypechoOAuthLogin/else/bootstrap.min.css">
     <style type="text/css">
         * {
             margin: 0;
@@ -27,7 +26,7 @@
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background-color: #f0f4f8;
-            background-image: url('https://bing.img.run/1920x1080.php'); /* Bing每日壁纸 */
+            background-image: url('https://bing.img.run/1920x1080.php');
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
@@ -50,6 +49,7 @@
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
             backdrop-filter: blur(10px);
             transition: all 0.3s ease;
+            position: relative;
         }
         
         .container:hover {
@@ -210,7 +210,6 @@
             }
         }
         
-        /* 错误信息样式 */
         .error-message {
             color: #ef4444;
             font-size: 12px;
@@ -219,13 +218,11 @@
             transition: opacity 0.3s ease;
         }
         
-        /* 输入错误状态 */
         .form-group input.error {
             border-color: #ef4444;
             box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
         }
         
-        /* 添加一些额外的视觉效果 */
         .container::before {
             content: '';
             position: absolute;
@@ -238,6 +235,32 @@
             z-index: -1;
             opacity: 0.2;
         }
+        
+        .notice {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            text-align: center;
+        }
+        
+        .notice-error {
+            background: #fee2e2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+        }
+        
+        .notice-success {
+            background: #dcfce7;
+            color: #16a34a;
+            border: 1px solid #bbf7d0;
+        }
+        
+        .notice-info {
+            background: #dbeafe;
+            color: #2563eb;
+            border: 1px solid #bfdbfe;
+        }
     </style>
 </head>
 <body>
@@ -247,6 +270,8 @@
         <section class="login-section">
         <h1><a href="<?php $this->options->siteUrl(); ?>" style="text-decoration: none; color: #007bff;"><?php echo htmlspecialchars($this->options->title, ENT_QUOTES, 'UTF-8'); ?></a></h1>
         <p><?php $this->options->description();?></p>
+            <div id="notice-area"></div>
+            
             <div class="tabs">
                 <a href="javascript:void(0)" class="tablinks active" onclick="openTab(event, 'tab1')">绑定新账号</a>
                 <a href="javascript:void(0)" class="tablinks" onclick="openTab(event, 'tab2')">绑定已有账号</a>
@@ -256,7 +281,7 @@
                 <form action="" method="POST" onsubmit="return validateRegForm()">
                     <div class="form-group">
                         <label for="screenName" class="required">用户名</label>
-                        <input type="text" id="screenName" name="screenName" value="<?php if (isset($this->auth['nickname'])){ echo $this->auth['nickname'];}?>" required>
+                        <input type="text" id="screenName" name="screenName" value="<?php if (isset($this->auth['nickname'])){ echo htmlspecialchars($this->auth['nickname'], ENT_QUOTES, 'UTF-8');}?>" required>
                         <div class="error-message" id="screenNameError"></div>
                     </div>
                     <div class="form-group">
@@ -310,7 +335,6 @@ function openTab(evt, tabName) {
     evt.currentTarget.className += " active";
 }
 
-// 密码验证函数
 function validatePassword() {
     const password = document.getElementById('password');
     const confirmPassword = document.getElementById('confirmPassword');
@@ -319,13 +343,11 @@ function validatePassword() {
     
     let isValid = true;
     
-    // 重置错误状态
     password.classList.remove('error');
     confirmPassword.classList.remove('error');
     passwordError.textContent = '';
     confirmPasswordError.textContent = '';
     
-    // 验证密码长度
     if (password.value.length > 0) {
         if (password.value.length < 6) {
             password.classList.add('error');
@@ -334,7 +356,6 @@ function validatePassword() {
         }
     }
     
-    // 验证两次密码是否一致
     if (confirmPassword.value.length > 0) {
         if (password.value !== confirmPassword.value) {
             confirmPassword.classList.add('error');
@@ -346,13 +367,44 @@ function validatePassword() {
     return isValid;
 }
 
-// 表单提交验证
 function validateRegForm() {
-    const isValid = validatePassword();
+    const screenName = document.getElementById('screenName');
+    const mail = document.getElementById('mail');
+    const screenNameError = document.getElementById('screenNameError');
+    const mailError = document.getElementById('mailError');
     
-    // 如果验证失败，阻止表单提交
+    let isValid = true;
+    
+    screenName.classList.remove('error');
+    screenNameError.textContent = '';
+    mail.classList.remove('error');
+    mailError.textContent = '';
+    
+    if (!screenName.value.trim()) {
+        screenName.classList.add('error');
+        screenNameError.textContent = '请填写用户名';
+        isValid = false;
+    }
+    
+    if (!mail.value.trim()) {
+        mail.classList.add('error');
+        mailError.textContent = '请填写邮箱';
+        isValid = false;
+    } else {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(mail.value)) {
+            mail.classList.add('error');
+            mailError.textContent = '邮箱格式不正确';
+            isValid = false;
+        }
+    }
+    
+    const passwordValid = validatePassword();
+    if (!passwordValid) {
+        isValid = false;
+    }
+    
     if (!isValid) {
-        // 滚动到第一个错误位置
         const firstError = document.querySelector('.error');
         if (firstError) {
             firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -363,7 +415,34 @@ function validateRegForm() {
     return true;
 }
 
-// 默认打开第一个tab
+function showNotice(message, type) {
+    var noticeArea = document.getElementById('notice-area');
+    if (!noticeArea) return;
+    
+    var notice = document.createElement('div');
+    notice.className = 'notice notice-' + type;
+    notice.textContent = message;
+    
+    noticeArea.innerHTML = '';
+    noticeArea.appendChild(notice);
+    
+    if (type === 'error') {
+        setTimeout(function() {
+            notice.style.opacity = '0';
+            notice.style.transition = 'opacity 0.3s ease';
+            setTimeout(function() {
+                notice.remove();
+            }, 300);
+        }, 5000);
+    }
+}
+
+var urlParams = new URLSearchParams(window.location.search);
+var errorMsg = urlParams.get('error');
+if (errorMsg) {
+    showNotice(decodeURIComponent(errorMsg), 'error');
+}
+
 document.getElementsByClassName('tablinks')[0].click();
 </script>
 </body>

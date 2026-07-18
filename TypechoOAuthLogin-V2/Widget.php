@@ -101,7 +101,6 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
             $this->referer = isset($_SESSION['typecho_OAuth_Login_Referer']) ? $_SESSION['typecho_OAuth_Login_Referer'] : '';
             unset($_SESSION['typecho_OAuth_Login_Referer']);
 
-            //仅处理来自绑定界面POST提交的数据，第三方回调会跳过
             if ($this->request->isPost()) {
                 $do = $this->request->get('do');
                 if (!in_array($do, array('bind','reg'))) {
@@ -111,15 +110,20 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
                 if (!isset($this->auth['openid']) || !isset($this->auth['type'])) {
                     $this->response->redirect(empty($this->referer) ? $this->options->index : $this->referer);
                 }
+                
+                $authType = $this->auth['type'];
                 $func = 'doCallback'.ucfirst($do);
                 $this->$func();
+                
                 unset($_SESSION['__typecho_auth']);
                 unset($_SESSION['__typecho_oauth_user']);
+                
                 $redirect = empty($this->referer) ? $this->options->index : $this->referer;
                 $manage = Typecho_Common::url('/connect/manage', $this->options->index);
                 if (0 === strpos($redirect, $manage)) {
-                    $redirect = Typecho_Common::url('/connect/manage?toast=on&type=' . $this->auth['type'], $this->options->index);
+                    $redirect = Typecho_Common::url('/connect/manage?toast=on&type=' . $authType, $this->options->index);
                 }
+                
                 $this->response->redirect($redirect);
             }
 
@@ -256,32 +260,25 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
             }
         }
     }
-    //绑定已有用户
     protected function doCallbackBind()
     {
         $name = $this->request->get('name');
         $password = $this->request->get('password');
 
         if (empty($name) || empty($password)) {
-            $this->widget('Widget_Notice')->set(array('帐号或密码不能为空!'), 'error');
-            $this->response->goBack();
+            $this->response->redirect(Typecho_Common::url('/oauth_callback?error=' . urlencode('帐号或密码不能为空!'), $this->options->index));
         }
         $isLogin = $this->user->login($name, $password);
         if ($isLogin) {
-            //UUID会员的原始ID
             $this->auth['uuid'] = $this->user->uid;
-
             $this->widget('Widget_Notice')->set(array('已成功绑定并登陆!'));
             $this->bindUser($this->user->uid, $this->oauth_user, $this->auth['type']);
         } else {
-            $this->widget('Widget_Notice')->set(array('帐号或密码错误!'), 'error');
-            $this->response->goBack();
+            $this->response->redirect(Typecho_Common::url('/oauth_callback?error=' . urlencode('帐号或密码错误!'), $this->options->index));
         }
     }
-    //注册新用户
     protected function doCallbackReg()
     {
-
         $validator = new Typecho_Validate();
         $validator->addRule('mail', 'required', _t('必须填写电子邮箱'));
         $validator->addRule('mail', array($this, 'mailExists'), _t('电子邮箱地址已经存在'));
@@ -300,28 +297,28 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
 
         /** 截获验证异常 */
         if ($error = $validator->run($this->request->from('mail', 'screenName', 'password', 'confirmPassword', 'url'))) {
-            /** 设置提示信息 */
-            $this->widget('Widget_Notice')->set($error);
-            $this->response->goBack();
+            $errorMsg = is_array($error) ? implode(' ', $error) : $error;
+            $this->response->redirect(Typecho_Common::url('/oauth_callback?error=' . urlencode($errorMsg), $this->options->index));
         }
 
         // 检查两次密码是否一致
         if ($this->request->password !== $this->request->confirmPassword) {
-            $this->widget('Widget_Notice')->set(array('两次输入的密码不一致!'), 'error');
-            $this->response->goBack();
+            $this->response->redirect(Typecho_Common::url('/oauth_callback?error=' . urlencode('两次输入的密码不一致!'), $this->options->index));
         }
 
         $dataStruct = array(
-            'name'      =>  $this->request->screenName, // 用户名同时作为登录名
+            'name'      =>  $this->request->screenName,
             'mail'      =>  $this->request->mail,
-            'screenName'=>  $this->request->screenName, // 用户名同时作为昵称
-            'password'  =>  Typecho_Common::hash($this->request->password), // 密码加密
+            'screenName'=>  $this->request->screenName,
+            'password'  =>  Typecho_Common::hash($this->request->password),
             'created'   =>  $this->options->gmtTime,
             'group'     =>  'subscriber'
         );
         $uid = $this->regConnectUser($dataStruct, $this->oauth_user);
         if ($uid) {
             $this->widget('Widget_Notice')->set(array('已成功注册并登陆!'));
+        } else {
+            $this->response->redirect(Typecho_Common::url('/oauth_callback?error=' . urlencode('注册失败，请重试'), $this->options->index));
         }
     }
 
@@ -451,6 +448,28 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
                 ->where('uid = ?', $uid)
                 ->where('type = ?', $type));
         }
+    }
+
+    public function mailExists($mail)
+    {
+        $mail = strtolower($mail);
+        $db = Typecho_Db::get();
+        $exist = $db->fetchRow($db->select('uid')->from('table.users')->where('mail = ?', $mail));
+        return empty($exist) ? true : false;
+    }
+
+    public function screenNameExists($screenName)
+    {
+        $db = Typecho_Db::get();
+        $exist = $db->fetchRow($db->select('uid')->from('table.users')->where('screenName = ?', $screenName));
+        return empty($exist) ? true : false;
+    }
+
+    public function nameExists($name)
+    {
+        $db = Typecho_Db::get();
+        $exist = $db->fetchRow($db->select('uid')->from('table.users')->where('name = ?', $name));
+        return empty($exist) ? true : false;
     }
 
     public function render($themeFile)

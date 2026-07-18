@@ -20,14 +20,15 @@ typecho第三方OAuth登录插件
 
 由于功能拓展以及后续开发需要，将插件改名为“TypechoOAuthLogin”。
 
-## 一、功能介绍
+# 功能介绍
 
 **Typecho互联登录插件，目前已支持的第三方登录：QQ/微信/Github/Msn/Google/新浪微博/豆瓣/点点/淘宝网/百度/通用OAuth2.0/OIDC登录。**
 后续会根据实际需要继续添加新的第三方接口，欢迎大家一起贡献。
-如使用过程中遇到问题，可到这篇文章下留言，我会尽快解决。 <https://www.tianlingzi.top/archives/232/>
+如使用过程中遇到问题，可到这篇文章下留言，我会尽快解决。 <https://www.tianlingzi.top/archives/273/>
 
 ***
 
+# 适用于V1版本
 ## 二、插件下载
 
 <https://github.com/tianlingzi/TypechoOAuthLogin/releases>
