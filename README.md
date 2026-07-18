@@ -2,6 +2,18 @@
 
 typecho第三方OAuth登录插件
 
+# 版本介绍
+
+随着目前typecho插件的不断发展，出了很多的美化插件，特别是登录页面的美化插件。
+对于旧版的TypechoOAuthLogin插件，使用的是代码引用的方式，需要在主题的适当位置添加代码。
+并且输出的格式一定，不能自定义。这就造成了对美化插件的冲突，导致整体的不协调。
+
+针对以上问题，尝试构建新版的插件，提供多种输出和引用格式，用于适配各种主题。
+
+特别注意：V2版本插件正在开发中，目前还存在很多功能未能完善。
+只要没发布release版本，就不要在生产环境中使用。
+如果你也能参与开发，欢迎一起贡献代码。
+
 # 前言
 
 插件前身：[tianlingzi/TeConnect](https://github.com/tianlingzi/TeConnect)，最后维护时间为2025年10月26日。
@@ -24,10 +36,11 @@ typecho第三方OAuth登录插件
 
 ## 三、安装步骤
 
-1. 解压插件到`Plugins`目录；
-2. 将文件名改为“TypechoOAuthLogin”；
-3. 在后台启用插件，并配置插件参数（方法见：参数配置 - 配置示例）；
-4. 在当前使用主题的适当位置添加`TypechoOAuthLogin_Plugin::show()`方法，代码：
+1. 下载本仓库文件；
+2. 将对应版本的插件文件夹“TypechoOAuthLogin-V*”复制到`Plugins`目录；
+3. 将文件名改为“TypechoOAuthLogin”；
+4. 在后台启用插件，并配置插件参数（方法见：参数配置 - 配置示例）；
+5. 在当前使用主题的适当位置添加`TypechoOAuthLogin_Plugin::show()`方法，代码：
 
 ```php
 <?php TypechoOAuthLogin_Plugin::show(); ?>

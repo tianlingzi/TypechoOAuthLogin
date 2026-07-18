@@ -1,0 +1,757 @@
+<?php
+if (!defined('__TYPECHO_ROOT_DIR__')) {
+    exit;
+}
+
+class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
+{
+    private $auth;
+    private $oauth_user;
+    private $referer = ''; // 来源页面
+    /**
+     * 风格目录
+     *
+     * @access private
+     * @var string
+     */
+    private $_themeDir;
+
+    public function __construct($request, $response, $params = null)
+    {
+        parent::__construct($request, $response, $params);
+        // 设置时区为北京时间，确保所有日期时间处理都使用正确的时区
+        date_default_timezone_set('Asia/Shanghai');
+        
+        $this->_themeDir = rtrim($this->options->themeFile($this->options->theme), '/') . '/';
+
+        /** 初始化皮肤函数 */
+        $functionsFile = $this->_themeDir . 'functions.php';
+        if (file_exists($functionsFile)) {
+            require_once $functionsFile;
+            if (function_exists('themeInit')) {
+                themeInit($this);
+            }
+        }
+    }
+    /**
+     * 获取Oauth登录地址，重定向
+     *
+     * @access public
+     * @param string $type 第三方登录类型
+     */
+    public function oauth()
+    {
+        $type = $this->request->get('type');
+        if (is_null($type)) {
+            throw new Typecho_Widget_Exception("请选择登录方式!");
+        } else {
+            $type = strtolower($type);
+            $options = TypechoOAuthLogin_Plugin::options();
+
+            //判断登录方式是否支持
+            if (!isset($options[$type])) {
+                throw new Typecho_Widget_Exception("暂不支持该登录方式! {$type}");
+            }
+
+            //加载ThinkOauth类并实例化一个对象
+            require_once 'ThinkOauth.php';
+            $sdk = ThinkOauth::getInstance($type);
+            /**
+             * 来源页面放入session
+             */
+            //开户session
+            if (isset($_COOKIE[session_name()]) && $_COOKIE[session_name()]) {
+                session_id($_COOKIE[session_name()]);
+            }
+            if (session_status() != PHP_SESSION_ACTIVE) {
+                session_set_cookie_params(3600);
+                session_start();
+            }
+            // 登录前页面
+            $this->referer = isset($_COOKIE['typecho_OAuth_Login_Referer']) ? urldecode($_COOKIE['typecho_OAuth_Login_Referer']) : $this->request->getReferer();
+            setcookie("typecho_OAuth_Login_Referer", "", time() - 3600);
+            if (strpos($this->referer, $this->options->index) === 0) {
+                // 站内来源页放入session
+                $_SESSION['typecho_OAuth_Login_Referer'] = $this->referer;
+            }
+            //302重定向
+            $this->response->redirect($sdk->getRequestCodeURL($type));
+        }
+    }
+    /**
+     * 第三方登录回调
+     *
+     * @access public
+     * @param array $do POST来的用户绑定数据
+     * @param string $type 第三方登录类型
+     */
+    public function callback()
+    {
+        //开户session
+        if (isset($_COOKIE[session_name()]) && $_COOKIE[session_name()]) {
+            session_id($_COOKIE[session_name()]);
+        }
+        if (session_status() != PHP_SESSION_ACTIVE) {
+            session_set_cookie_params(3600);
+            session_start();
+        }
+        $this->auth = isset($_SESSION['__typecho_auth']) ? $_SESSION['__typecho_auth']  : array();
+        $this->oauth_user = isset($_SESSION['__typecho_oauth_user']) ? $_SESSION['__typecho_oauth_user']  : array();
+        // session内取出来源页
+            $this->referer = isset($_SESSION['typecho_OAuth_Login_Referer']) ? $_SESSION['typecho_OAuth_Login_Referer'] : '';
+            unset($_SESSION['typecho_OAuth_Login_Referer']);
+
+            //仅处理来自绑定界面POST提交的数据，第三方回调会跳过
+            if ($this->request->isPost()) {
+                $do = $this->request->get('do');
+                if (!in_array($do, array('bind','reg'))) {
+                    throw new Typecho_Widget_Exception("错误数据！");
+                }
+
+                if (!isset($this->auth['openid']) || !isset($this->auth['type'])) {
+                    $this->response->redirect(empty($this->referer) ? $this->options->index : $this->referer);
+                }
+                $func = 'doCallback'.ucfirst($do);
+                $this->$func();
+                unset($_SESSION['__typecho_auth']);
+                unset($_SESSION['__typecho_oauth_user']);
+                $redirect = empty($this->referer) ? $this->options->index : $this->referer;
+                $manage = Typecho_Common::url('/connect/manage', $this->options->index);
+                if (0 === strpos($redirect, $manage)) {
+                    $redirect = Typecho_Common::url('/connect/manage?toast=on&type=' . $this->auth['type'], $this->options->index);
+                }
+                $this->response->redirect($redirect);
+            }
+
+            //第三方登录回调处理
+            $options = TypechoOAuthLogin_Plugin::options();
+        $oauth_user = array();
+        if (empty($this->auth)) {
+            $code = $this->request->get('code', '');
+            $this->auth['type'] = $this->request->get('type', '');
+
+            if (empty($code) || empty($this->auth['type']) || !isset($options[$this->auth['type']])) {
+                //缺少code、type、未开启type，直接跳主页
+                $this->response->redirect($this->options->index);
+            }
+            //转小写
+            $type = $this->auth['type'] = strtolower($this->auth['type']);
+            //加载ThinkOauth类并实例化一个对象
+            require_once 'ThinkOauth.php';
+            try {
+                $sdk = ThinkOauth::getInstance($type);
+                //请求接口(返回值包含openid)
+                $token = $sdk->getAccessToken($type, $code);
+                if (is_array($token)) {
+                    //获取第三方账号数据
+                    $user_info = $this->$type($token);
+                    
+                    // 确保user_info是数组
+                    if (!is_array($user_info)) {
+                        $user_info = array(
+                            'name' => $token['openid'],
+                            'nickname' => $token['openid'],
+                            'head_img' => '',
+                            'gender' => 0
+                        );
+                    }
+                    
+                    $oauth_user = array(
+                        'uid'           =>  0,
+                        'openid'        =>  $token['openid'],
+                        'access_token'  =>  $token['access_token'],
+                        'expires_in'    =>  isset($token['expires_in']) ? $this->options->gmtTime+$token['expires_in']: 0,
+                        'gender'        =>  isset($user_info['gender']) ? $user_info['gender'] : 0,
+                        'head_img'      =>  isset($user_info['head_img']) ? $user_info['head_img'] : '',
+                        'name'          =>  isset($user_info['name']) ? $user_info['name'] : $token['openid'],
+                        'nickname'      =>  isset($user_info['nickname']) ? $user_info['nickname'] : $token['openid'],
+                        'type'          =>  $type,
+                    );
+                    //获取openid
+                    $this->auth['openid'] = $token['openid'];
+                    $this->auth['nickname'] = isset($user_info['nickname']) ? $user_info['nickname'] : $token['openid'];
+                } else {
+                    $this->response->redirect($this->options->index);
+                }
+            } catch (Exception $e) {
+                // 记录错误信息
+                error_log('OAuth登录错误: ' . $e->getMessage());
+                // 显示错误提示并跳转
+                $this->widget('Widget_Notice')->set(array('登录失败: ' . $e->getMessage()), 'error');
+                $this->response->redirect($this->options->index);
+            }
+        }
+        //登录状态
+        if ($this->user->hasLogin()) {
+            //UUID会员的原始ID
+            $this->auth['uuid'] = $this->user->uid;
+
+            //直接绑定第三方账号
+            $this->bindUser($this->user->uid, $oauth_user, $this->auth['type']);
+            //提示，并跳转
+            $this->widget('Widget_Notice')->set(array('成功绑定账号!'));
+            $redirect = empty($this->referer) ? $this->options->index : $this->referer;
+            $manage = Typecho_Common::url('/connect/manage', $this->options->index);
+            if (0 === strpos($redirect, $manage)) {
+                $redirect = Typecho_Common::url('/connect/manage?toast=on&type=' . $this->auth['type'], $this->options->index);
+            }
+            $this->response->redirect($redirect);
+        } else {
+            //未登录状态，查询第三方账号的绑定关系
+            $isConnect = $this->findConnectUser($oauth_user, $this->auth['type']);
+            if ($isConnect) {
+                //已经绑定，直接登录
+                $this->useUidLogin($isConnect['uid'], 0, $this->auth['type']);
+                //提示，并跳转
+                $this->widget('Widget_Notice')->set(array('已成功登陆!'));
+                $redirect = empty($this->referer) ? $this->options->index : $this->referer;
+                $manage = Typecho_Common::url('/connect/manage', $this->options->index);
+                if (0 === strpos($redirect, $manage)) {
+                    $redirect = Typecho_Common::url('/connect/manage?toast=on&type=' . $this->auth['type'], $this->options->index);
+                }
+                $this->response->redirect($redirect);
+            }
+
+            //未登录状态且未绑定，控制显示绑定界面
+            $custom = $this->options->plugin('TypechoOAuthLogin')->custom;
+            if (!$custom && !empty($this->auth['nickname'])) {
+                // 生成随机密码
+                $randomPassword = Typecho_Common::randString(8);
+                
+                // 使用第三方昵称作为用户名和昵称
+                $username = $this->auth['nickname'];
+                
+                // 生成唯一邮箱（如果没有邮箱信息）
+                $mail = $username . '@' . preg_replace('/^www\./', '', parse_url($this->options->siteUrl, PHP_URL_HOST));
+                
+                $dataStruct = array(
+                    'name'      =>  $username, // 用户名同时作为登录名
+                    'mail'      =>  $mail,
+                    'screenName'=>  $username, // 用户名同时作为昵称
+                    'password'  =>  Typecho_Common::hash($randomPassword), // 密码加密
+                    'created'   =>  $this->options->gmtTime,
+                    'group'     =>  'subscriber'
+                );
+                //新注册账号
+                $uid = $this->regConnectUser($dataStruct, $oauth_user);
+                if ($uid) {
+                    $this->widget('Widget_Notice')->set(array('已成功注册并登陆!'));
+                } else {
+                    $this->widget('Widget_Notice')->set(array('注册用户失败!'), 'error');
+                }
+                $redirect = empty($this->referer) ? $this->options->index : $this->referer;
+                $manage = Typecho_Common::url('/connect/manage', $this->options->index);
+                if (0 === strpos($redirect, $manage)) {
+                    $redirect = Typecho_Common::url('/connect/manage?toast=on&type=' . $this->auth['type'], $this->options->index);
+                }
+                $this->response->redirect($redirect);
+            } else {
+                //用户绑定界面
+                if (!isset($_SESSION['__typecho_auth'])) {
+                    $_SESSION['__typecho_auth'] = $this->auth;
+                    $_SESSION['__typecho_oauth_user'] = $oauth_user;
+                }
+                //未绑定，引导用户到绑定界面
+                $this->render('callback.php');
+            }
+        }
+    }
+    //绑定已有用户
+    protected function doCallbackBind()
+    {
+        $name = $this->request->get('name');
+        $password = $this->request->get('password');
+
+        if (empty($name) || empty($password)) {
+            $this->widget('Widget_Notice')->set(array('帐号或密码不能为空!'), 'error');
+            $this->response->goBack();
+        }
+        $isLogin = $this->user->login($name, $password);
+        if ($isLogin) {
+            //UUID会员的原始ID
+            $this->auth['uuid'] = $this->user->uid;
+
+            $this->widget('Widget_Notice')->set(array('已成功绑定并登陆!'));
+            $this->bindUser($this->user->uid, $this->oauth_user, $this->auth['type']);
+        } else {
+            $this->widget('Widget_Notice')->set(array('帐号或密码错误!'), 'error');
+            $this->response->goBack();
+        }
+    }
+    //注册新用户
+    protected function doCallbackReg()
+    {
+
+        $validator = new Typecho_Validate();
+        $validator->addRule('mail', 'required', _t('必须填写电子邮箱'));
+        $validator->addRule('mail', array($this, 'mailExists'), _t('电子邮箱地址已经存在'));
+        $validator->addRule('mail', 'email', _t('电子邮箱格式错误'));
+        $validator->addRule('mail', 'maxLength', _t('电子邮箱最多包含200个字符'), 200);
+
+        $validator->addRule('screenName', 'required', _t('必须填写用户名'));
+        $validator->addRule('screenName', 'xssCheck', _t('请不要在用户名中使用特殊字符'));
+        $validator->addRule('screenName', array($this, 'screenNameExists'), _t('用户名已经存在'));
+        $validator->addRule('screenName', array($this, 'nameExists'), _t('用户名已经被使用'));
+
+        $validator->addRule('password', 'required', _t('必须填写密码'));
+        $validator->addRule('password', 'minLength', _t('密码长度不能小于6个字符'), 6);
+        
+        $validator->addRule('confirmPassword', 'required', _t('必须确认密码'));
+
+        /** 截获验证异常 */
+        if ($error = $validator->run($this->request->from('mail', 'screenName', 'password', 'confirmPassword', 'url'))) {
+            /** 设置提示信息 */
+            $this->widget('Widget_Notice')->set($error);
+            $this->response->goBack();
+        }
+
+        // 检查两次密码是否一致
+        if ($this->request->password !== $this->request->confirmPassword) {
+            $this->widget('Widget_Notice')->set(array('两次输入的密码不一致!'), 'error');
+            $this->response->goBack();
+        }
+
+        $dataStruct = array(
+            'name'      =>  $this->request->screenName, // 用户名同时作为登录名
+            'mail'      =>  $this->request->mail,
+            'screenName'=>  $this->request->screenName, // 用户名同时作为昵称
+            'password'  =>  Typecho_Common::hash($this->request->password), // 密码加密
+            'created'   =>  $this->options->gmtTime,
+            'group'     =>  'subscriber'
+        );
+        $uid = $this->regConnectUser($dataStruct, $this->oauth_user);
+        if ($uid) {
+            $this->widget('Widget_Notice')->set(array('已成功注册并登陆!'));
+        }
+    }
+
+    protected function regConnectUser($data, $oauth_user)
+    {
+        $insertId = $this->insert($data);
+        if ($insertId) {
+            //UUID会员的原始ID
+            $this->auth['uuid'] = $insertId;
+
+            $this->bindUser($insertId, $oauth_user, $this->auth['type']);
+            $this->useUidLogin($insertId, 0, $this->auth['type']);
+            return $insertId;
+        } else {
+            return false;
+        }
+    }
+
+    //处理用户与第三方账号的绑定关系（逻辑复杂）
+    // 同一用户，可以绑定不同的登录方式！但是，同类型的第三方账号仅可绑定一个！
+    protected function bindUser($uid, $oauth_user, $type)
+    {
+        try {
+            // 确保数据格式正确
+            $oauth_user['uid'] = intval($uid);
+            if (isset($this->auth['uuid'])) {
+                $oauth_user['uuid'] = intval($this->auth['uuid']);
+            }
+            $oauth_user['gender'] = intval($oauth_user['gender']);
+            $oauth_user['expires_in'] = intval($oauth_user['expires_in']);
+            
+            // 确保字符串长度符合数据库限制
+            $oauth_user['type'] = substr($oauth_user['type'], 0, 32);
+            $oauth_user['openid'] = substr($oauth_user['openid'], 0, 50);
+            $oauth_user['name'] = substr($oauth_user['name'], 0, 100);
+            $oauth_user['nickname'] = substr($oauth_user['nickname'], 0, 100);
+            $oauth_user['head_img'] = substr($oauth_user['head_img'], 0, 255);
+            
+            //查询当前登录的账号是否绑定？
+            $connect = $this->db->fetchRow($this->db->select()
+                ->from('table.oauth_user')
+                ->where('uid = ?', $uid)
+                ->where('type = ?', $type)
+                ->limit(1));
+            if (empty($connect)) {
+                //未绑定
+                $oauthRow = $this->findConnectUser($oauth_user, $type);
+                if ($oauthRow) {
+                    //已存在第三方账号，更新绑定关系
+                    $this->db->query($this->db
+                    ->update('table.oauth_user')
+                    ->rows(array('uid' => $uid))
+                    ->where('openid = ?', $oauth_user['openid'])
+                    ->where('type = ?', $type));
+                } else {
+                    //未绑定，插入数据并绑定
+                    $this->db->query($this->db->insert('table.oauth_user')->rows($oauth_user));
+                }
+            } else {
+                //已绑定，判断更新条件，避免绑定错乱（同类型的第三方账号，用户只能绑定一个）
+                if ($connect['openid'] == $oauth_user['openid']) {
+                    ###更新资料tudo
+                } else {
+                    ###换绑tudo
+                }
+            }
+        } catch (Exception $e) {
+            // 记录错误信息
+            error_log('绑定用户失败: ' . $e->getMessage());
+            // 抛出异常，让上层处理
+            throw new Exception('绑定用户失败: ' . $e->getMessage());
+        }
+    }
+    //查找第三方账号
+    protected function findConnectUser($oauth_user, $type)
+    {
+        // 确保使用与存储时相同的截断值进行查询
+        $openid = substr($oauth_user['openid'], 0, 50);
+        $type = substr($type, 0, 32);
+        
+        $user = $this->db->fetchRow($this->db->select()
+            ->from('table.oauth_user')
+            ->where('openid = ?', $openid)
+            ->where('type = ?', $type)
+            ->limit(1));
+        
+        if (!empty($user)) {
+            // 验证本地账户是否存在
+            $localUser = $this->db->fetchRow($this->db->select()
+                ->from('table.users')
+                ->where('uid = ?', $user['uid'])
+                ->limit(1));
+            
+            if (empty($localUser)) {
+                // 本地账户不存在，删除该第三方账号的绑定信息
+                $this->db->query($this->db->delete('table.oauth_user')
+                    ->where('openid = ?', $oauth_user['openid'])
+                    ->where('type = ?', $type));
+                return 0;
+            }
+        }
+        
+        return empty($user)? 0 : $user;
+    }
+    //使用用户uid登录
+    protected function useUidLogin($uid, $expire = 0, $type = '')
+    {
+        $authCode = function_exists('openssl_random_pseudo_bytes') ?
+        bin2hex(openssl_random_pseudo_bytes(16)) : sha1(Typecho_Common::randString(20));
+        $user = array('uid'=>$uid,'authCode'=>$authCode);
+
+        Typecho_Cookie::set('__typecho_uid', $uid, $expire);
+        Typecho_Cookie::set('__typecho_authCode', Typecho_Common::hash($authCode), $expire);
+
+        //更新最后登录时间以及验证码
+        $this->db->query($this->db
+            ->update('table.users')
+            ->expression('logged', 'activated')
+            ->rows(array('authCode' => $authCode))
+            ->where('uid = ?', $uid));
+        
+        //只更新对应type的datetime
+        if (!empty($type)) {
+            $this->db->query($this->db
+                ->update('table.oauth_user')
+                ->rows(array('datetime' => date("Y-m-d H:i:s", time())))
+                ->where('uid = ?', $uid)
+                ->where('type = ?', $type));
+        }
+    }
+
+    public function render($themeFile)
+    {
+        /** 文件不存在 */
+        if (!is_file(__DIR__ . '/' . $themeFile)) {
+            Typecho_Common::error(500);
+        }
+        /** 输出模板 */
+        require_once (__DIR__ . '/' . $themeFile);
+    }
+    /**
+     * 获取主题文件
+     *
+     * @access public
+     * @param string $fileName 主题文件
+     * @return void
+     */
+    public function need($fileName)
+    {
+        require $this->_themeDir . $fileName;
+    }
+
+    /**
+     * 管理已绑定的第三方登录
+     */
+    public function manage()
+    {
+        if (!$this->user->hasLogin()) {
+            $this->response->redirect(Typecho_Common::url('/', $this->options->index));
+        }
+        $this->render('manage.php');
+    }
+
+    /**
+     * 切换绑定状态：开启(跳转绑定) / 关闭(清除绑定)
+     */
+    public function toggle()
+    {
+        if (!$this->user->hasLogin()) {
+            $this->response->redirect(Typecho_Common::url('/', $this->options->index));
+        }
+        $type = strtolower($this->request->get('type'));
+        $action = strtolower($this->request->get('action'));
+        if (empty($type) || empty($action)) {
+            $this->widget('Widget_Notice')->set(_t('参数缺失'), null, 'error');
+            $this->response->redirect(Typecho_Common::url('/connect/manage', $this->options->index));
+        }
+
+        if ('off' === $action) {
+            $db = Typecho_Db::get();
+            $db->query(
+                $db->delete('table.oauth_user')
+                    ->where('uid = ?', $this->user->uid)
+                    ->where('type = ?', $type)
+            );
+            $this->widget('Widget_Notice')->set(_t('已清除绑定：%s', $type));
+            $this->response->redirect(Typecho_Common::url('/connect/manage?toast=off&type=' . $type, $this->options->index));
+        } elseif ('on' === $action) {
+            @setcookie('typecho_OAuth_Login_Referer', Typecho_Common::url('/connect/manage', $this->options->index));
+            $this->response->redirect(Typecho_Common::url('/oauth?type='.$type, $this->options->index));
+        } else {
+            $this->widget('Widget_Notice')->set(_t('不支持的操作'), null, 'error');
+            $this->response->redirect(Typecho_Common::url('/connect/manage', $this->options->index));
+        }
+    }
+    
+    /**
+     * 清除数据表数据并重建表结构
+     */
+    public function clearTable()
+    {
+        // 调用Plugin类的clearTable方法
+        $result = TypechoOAuthLogin_Plugin::clearTable();
+        $this->widget('Widget_Notice')->set($result, 'success');
+        $this->response->redirect(Typecho_Common::url('options-plugin.php?config=TypechoOAuthLogin', $this->options->adminUrl));
+    }
+    
+    /**
+     * 删除数据表
+     */
+    public function removeTable()
+    {
+        $result = TypechoOAuthLogin_Plugin::removeTable();
+        $this->widget('Widget_Notice')->set($result, 'success');
+        $this->response->redirect(Typecho_Common::url('options-plugin.php?config=TypechoOAuthLogin', $this->options->adminUrl));
+    }
+
+    //登录成功，获取腾讯QQ用户信息
+    public function qq($token)
+    {
+        $qq = ThinkOauth::getInstance('qq', $token);
+        $data = $qq->call('user/get_user_info');
+        if ($data['ret'] == 0) {
+            $userInfo['name'] = $data['nickname'];
+            $userInfo['nickname'] = $data['nickname'];
+            $userInfo['head_img'] = $data['figureurl_2'];
+
+            if ($data['gender'] == '男') {
+                $userInfo['gender'] = 1;
+            } elseif ($data['gender'] == '女') {
+                $userInfo['gender'] = 2;
+            } else {
+                $userInfo['gender'] = 0;
+            }
+            return $userInfo;
+        } else {
+            $this->widget('Widget_Notice')->set(array("获取腾讯QQ用户信息失败：{$data['msg']}"), 'error');
+        }
+    }
+
+    //登录成功，获取微信用户信息
+    public function wechat($token)
+    {
+        $wechat = ThinkOauth::getInstance('wechat', $token);
+        $data = $wechat->call('sns/userinfo');
+        if (empty($data['errcode'])) {
+            $userInfo['name'] = $data['nickname'];
+            $userInfo['nickname'] = $data['nickname'];
+            $userInfo['head_img'] = $data['headimgurl'];
+
+            if ($data['sex'] == 1) {
+                $userInfo['gender'] = 1;
+            } elseif ($data['sex'] == 2) {
+                $userInfo['gender'] = 2;
+            } else {
+                $userInfo['gender'] = 0;
+            }
+            return $userInfo;
+        } else {
+            $this->widget('Widget_Notice')->set(array("获取用户信息失败：{$data['msg']}"), 'error');
+        }
+    }
+
+    //登录成功，获取新浪微博用户信息
+    public function sina($token)
+    {
+        $sina = ThinkOauth::getInstance('sina', $token);
+        $data = $sina->call('users/show', "uid={$sina->openid()}");
+        if ($data['error_code'] == 0) {
+            $userInfo['name'] = $data['name'];
+            $userInfo['nickname'] = $data['screen_name'];
+            $userInfo['head_img'] = $data['avatar_large'];
+            $userInfo['gender'] = 0;
+            return $userInfo;
+        } else {
+            //throw_exception("获取新浪微博用户信息失败：{$data['error']}");
+        }
+    }
+    
+    //登录成功，获取豆瓣用户信息
+    public function douban($token)
+    {
+        $douban = ThinkOauth::getInstance('douban', $token);
+        $data   = $douban->call('user/~me');
+        if (empty($data['code'])) {
+            $userInfo['name'] = $data['name'];
+            $userInfo['nickname'] = $data['name'];
+            $userInfo['head_img'] = $data['avatar'];
+            $userInfo['gender'] = 0;
+            return $userInfo;
+        } else {
+            //throw_exception("获取豆瓣用户信息失败：{$data['msg']}");
+        }
+    }
+
+    //登录成功，获取Github用户信息
+    public function github($token)
+    {
+        $github = ThinkOauth::getInstance('github', $token);
+        $data   = $github->call('user');
+        if (empty($data['code'])) {
+            $userInfo['name'] = $data['login'];
+            $userInfo['nickname'] = $data['name'];
+            $userInfo['head_img'] = $data['avatar_url'];
+            $userInfo['gender'] = 0;
+            return $userInfo;
+        } else {
+            //throw_exception("获取Github用户信息失败：{$data}");
+        }
+    }
+
+    //登录成功，获取Google用户信息
+    public function google($token)
+    {
+        $google = ThinkOauth::getInstance('google', $token);
+        $data   = $google->call('userinfo');
+        if (!empty($data['id'])) {
+            $userInfo['name'] = $data['name'];
+            $userInfo['nickname'] = $data['name'];
+            $userInfo['head_img'] = $data['picture'];
+            $userInfo['gender'] = 0;
+            return $userInfo;
+        } else {
+            //throw_exception("获取Google用户信息失败：{$data}");
+        }
+    }
+
+    //登录成功，获取msn用户信息
+    public function msn($token)
+    {
+        $msn  = ThinkOauth::getInstance('msn', $token);
+        $data = $msn->call('me');
+        if (!empty($data['id'])) {
+            $userInfo['name'] = $data['name'];
+            $userInfo['nickname'] = $data['name'];
+            $userInfo['head_img'] = '微软暂未提供头像URL，请通过 me/picture 接口下载';
+            $userInfo['gender'] = 0;
+            return $userInfo;
+        } else {
+            //throw_exception("获取msn用户信息失败：{$data}");
+        }
+    }
+
+    //登录成功，获取点点用户信息
+    public function diandian($token)
+    {
+        $diandian  = ThinkOauth::getInstance('diandian', $token);
+        $data      = $diandian->call('user/info');
+        if (!empty($data['meta']['status']) && $data['meta']['status'] == 200) {
+            $userInfo['name'] = $data['response']['name'];
+            $userInfo['nickname'] = $data['response']['name'];
+            $userInfo['head_img'] = "https://api.diandian.com/v1/blog/{$data['response']['blogs'][0]['blogUuid']}/avatar/144";
+            $userInfo['gender'] = 0;
+            return $userInfo;
+        } else {
+            //throw_exception("获取点点用户信息失败：{$data}");
+        }
+    }
+
+    //登录成功，获取淘宝网用户信息
+    public function taobao($token)
+    {
+        $taobao = ThinkOauth::getInstance('taobao', $token);
+        $fields = 'user_id,nick,sex,buyer_credit,avatar,has_shop,vip_info';
+        $data   = $taobao->call('taobao.user.buyer.get', "fields={$fields}");
+        if (!empty($data['user_buyer_get_response']['user'])) {
+            $user = $data['user_buyer_get_response']['user'];
+            $userInfo['name'] = $user['user_id'];
+            $userInfo['nickname'] = $user['nick'];
+            $userInfo['head_img'] = $user['avatar'];
+            $userInfo['gender'] = 0;
+            return $userInfo;
+        } else {
+            //throw_exception("获取淘宝网用户信息失败：{$data['error_response']['msg']}");
+        }
+    }
+
+    //登录成功，获取百度用户信息
+    public function baidu($token)
+    {
+        $baidu = ThinkOauth::getInstance('baidu', $token);
+        $data  = $baidu->call('passport/users/getLoggedInUser');
+        if (!empty($data['uid'])) {
+            $userInfo['name'] = $data['uid'];
+            $userInfo['nickname'] = $data['uname'];
+            $userInfo['head_img'] = "http://tb.himg.baidu.com/sys/portrait/item/{$data['portrait']}";
+            $userInfo['gender'] = 0;
+            return $userInfo;
+        } else {
+            //throw_exception("获取百度用户信息失败：{$data['error_msg']}");
+        }
+    }
+    
+    //登录成功，获取Custom Login用户信息
+    public function customlogin($token)
+    {
+        $customlogin = ThinkOauth::getInstance('customlogin', $token);
+        $data = $customlogin->getUserInfo();
+        
+        // 确保返回有效的用户信息数组
+        $userInfo = array(
+            'name' => '',
+            'nickname' => '',
+            'head_img' => '',
+            'gender' => 0
+        );
+        
+        if (!empty($data['sub'])) {
+            $userInfo['name'] = isset($data['preferred_username']) ? $data['preferred_username'] : $data['sub'];
+            $userInfo['nickname'] = isset($data['name']) ? $data['name'] : $userInfo['name'];
+            $userInfo['head_img'] = isset($data['picture']) ? $data['picture'] : '';
+            
+            // 处理性别
+            $gender = 0;
+            if (isset($data['gender'])) {
+                if (strtolower($data['gender']) == 'male') {
+                    $gender = 1;
+                } elseif (strtolower($data['gender']) == 'female') {
+                    $gender = 2;
+                }
+            }
+            $userInfo['gender'] = $gender;
+        } else {
+            // 如果没有获取到用户信息，使用openid作为用户名和昵称
+            $userInfo['name'] = $token['openid'];
+            $userInfo['nickname'] = $token['openid'];
+            $this->widget('Widget_Notice')->set(array("获取Custom Login用户信息失败，使用openid作为用户名"), 'error');
+        }
+        
+        return $userInfo;
+    }
+
+}
