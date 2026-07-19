@@ -26,7 +26,7 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
             Helper::addRoute('connect_clear_table', '/connect/clear-table', 'TypechoOAuthLogin_Widget', 'clearTable');
             Helper::addRoute('connect_remove_table', '/connect/remove-table', 'TypechoOAuthLogin_Widget', 'removeTable');
 
-            Typecho_Plugin::factory('admin/footer.php')->end = array('TypechoOAuthLogin_Plugin', 'insertLoginButtons');
+            Typecho_Plugin::factory('admin/common.php')->begin = array('TypechoOAuthLogin_Plugin', 'handleEarlyLoginInsert');
             Typecho_Plugin::factory('index.php')->end = array('TypechoOAuthLogin_Plugin', 'injectFrontendLoginScript');
 
             return $info;
@@ -700,29 +700,27 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
         };
         (function(){
             var f = function() {
-                var submitP = document.querySelector("form[name='login'] p.submit");
-                if (!submitP) {
-                    var l = document.querySelector("form[name='login']");
-                    if (!l) {
-                        console.log('OAUTH_DEBUG: no login form found');
-                        return;
-                    }
-                    submitP = l;
+                var form = document.querySelector("form[name='login']");
+                if (!form) {
+                    console.log('OAUTH_DEBUG: no login form found');
+                    return;
                 }
+                
                 var e = document.querySelector(".oauth-login-section");
                 if (e) return;
                 
                 var c = window.oauthLoginConfig.configs;
                 var d = window.oauthLoginConfig.displayType;
                 
-                var h = "<div class='oauth-login-section'>";
-                h += "<div style='font-size:14px;color:#999;margin:16px 0;padding:8px 0;border-top:1px dashed #ddd;text-align:center;'>——第三方登录——</div>";
+                var h = "<p>";
+                h += "<div style='display:flex;align-items:center;margin:16px 0;'><div style='flex:1;height:1px;background:#ddd;'></div><span style='margin:0 12px;font-size:14px;color:#999;'>第三方登录</span><div style='flex:1;height:1px;background:#ddd;'></div></div>";
+                h += "</p>";
                 
                 var b = "";
                 for (var i = 0; i < c.length; i++) {
                     var g = c[i];
                     if (d == "button") {
-                        b += "<button class='btn btn-l w-100 primary' onclick='location.href=\"" + g.url + "\"' style='margin-bottom:8px;display:block;'>" + g.title + "</button>";
+                        b += "<p><button class='btn btn-l w-100 primary' onclick='location.href=\"" + g.url + "\"'>" + g.title + "</button></p>";
                     } else if (d == "circle") {
                         b += "<a href='" + g.url + "' title='" + g.title + "' style='margin:0 8px;'>";
                         b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:36px;height:36px;border-radius:50%;'/>";
@@ -735,24 +733,180 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
                 }
                 
                 if (d == "button") {
-                    h += "<div style='text-align:left;'>" + b + "</div>";
+                    h += b;
                 } else {
-                    h += "<div style='text-align:center;'>" + b + "</div>";
+                    h += "<p style='text-align:center;'>" + b + "</p>";
                 }
                 
-                h += "</div>";
+                var submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+                var insertPoint = submitBtn ? submitBtn.parentNode : form;
+                insertPoint.insertAdjacentHTML("afterend", h);
                 
-                submitP.insertAdjacentHTML("afterend", h);
+                if (d == "button" && form.classList.contains('lb-form')) {
+                    var oauthBtns = form.querySelectorAll('p:not(.lb-field):not(.lb-remember) button.btn');
+                    oauthBtns.forEach(function(btn){
+                        var submitWrap = document.createElement('div');
+                        submitWrap.className = 'lb-submit';
+                        var p = btn.parentNode;
+                        p.insertBefore(submitWrap, btn);
+                        submitWrap.appendChild(btn);
+                    });
+                }
             };
             
             if (document.readyState === "loading") {
-                document.addEventListener("DOMContentLoaded", f);
+                document.addEventListener("DOMContentLoaded", function(){
+                    setTimeout(f, 100);
+                });
             } else {
-                f();
+                setTimeout(f, 100);
             }
         })();
         </script>
         <?php
+    }
+
+    public static function handleEarlyLoginInsert()
+    {
+        $currentUrl = Typecho_Widget::Widget('Widget_Options')->request->getRequestUrl();
+        $isLoginPage = strpos($currentUrl, '/admin/login.php') !== false;
+        
+        if (!$isLoginPage) {
+            return;
+        }
+
+        $pluginOptions = Typecho_Widget::Widget('Widget_Options')->plugin('TypechoOAuthLogin');
+        $autoInsert = $pluginOptions->autoInsert;
+        if (!isset($autoInsert) || (int)$autoInsert !== 1) {
+            return;
+        }
+
+        $list = self::options();
+        if (empty($list)) {
+            return;
+        }
+
+        $displayType = $pluginOptions->displayType;
+        if (empty($displayType)) {
+            $displayType = 'button';
+        }
+
+        $siteUrl = Typecho_Widget::Widget('Widget_Options')->index;
+
+        $configs = array();
+        foreach ($list as $type => $v) {
+            $configs[] = array(
+                'type' => $type,
+                'title' => $v['title'],
+                'url' => Typecho_Common::url('/oauth?type=' . $type, $siteUrl)
+            );
+        }
+
+        $configJson = json_encode($configs);
+        
+        $oauthScript = <<<EOSCRIPT
+<script>
+window.oauthLoginConfig = {
+    configs: {$configJson},
+    displayType: "{$displayType}"
+};
+(function(){
+    var f = function() {
+        var form = document.querySelector("form[name='login'], form.login-form");
+        if (!form) {
+            console.log('OAUTH_DEBUG: no login form found');
+            return;
+        }
+        
+        var e = document.querySelector(".oauth-login-section");
+        if (e) return;
+        
+        var isGateLogin = document.body.classList.contains('dark-body') || document.body.classList.contains('body-100') && form.classList.contains('login-form');
+        
+        var submitBtn = form.querySelector('button[type="submit"], input[type="submit"], .submit-button, .submit-btn');
+        var gateLoginBtnClass = submitBtn && submitBtn.classList.contains('submit-btn') ? 'submit-btn' : 'submit-button';
+        
+        var c = window.oauthLoginConfig.configs;
+        var d = window.oauthLoginConfig.displayType;
+        
+        var separatorStyle = isGateLogin 
+            ? "<div style='display:flex;align-items:center;margin:20px 0;'><div style='flex:1;height:1px;background:linear-gradient(90deg,transparent,var(--color-border-hover, #3f444e),transparent);'></div><span style='margin:0 12px;font-size:13px;color:var(--color-text-muted, #9ca3af);font-weight:500;'>第三方登录</span><div style='flex:1;height:1px;background:linear-gradient(90deg,transparent,var(--color-border-hover, #3f444e),transparent);'></div></div>"
+            : "<div style='display:flex;align-items:center;margin:16px 0;'><div style='flex:1;height:1px;background:#ddd;'></div><span style='margin:0 12px;font-size:14px;color:#999;'>第三方登录</span><div style='flex:1;height:1px;background:#ddd;'></div></div>";
+        
+        var h = isGateLogin ? "<div class='form-group'>" : "<p>";
+        h += separatorStyle;
+        h += isGateLogin ? "</div>" : "</p>";
+        
+        var b = "";
+        for (var i = 0; i < c.length; i++) {
+            var g = c[i];
+            if (d == "button") {
+                if (isGateLogin) {
+                    if (gateLoginBtnClass === 'submit-btn') {
+                        b += "<button type='button' class='submit-btn' onclick='location.href=\"" + g.url + "\"'>";
+                        b += "<span class='btn-text'>" + g.title + "</span>";
+                        b += "<span class='btn-icon'>";
+                        b += "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'>";
+                        b += "<path d='M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='8.5' cy='7' r='4'/><line x1='20' y1='8' x2='20' y2='14'/><line x1='23' y1='11' x2='17' y2='11'/>";
+                        b += "</svg></span></button>";
+                    } else {
+                        b += "<button type='button' class='submit-button' onclick='location.href=\"" + g.url + "\"'>";
+                        b += "<span class='button-text'>" + g.title + "</span>";
+                        b += "<svg class='button-icon' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'>";
+                        b += "<path d='M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='8.5' cy='7' r='4'/><line x1='20' y1='8' x2='20' y2='14'/><line x1='23' y1='11' x2='17' y2='11'/>";
+                        b += "</svg></button>";
+                    }
+                } else {
+                    b += "<p><button class='btn btn-l w-100 primary' onclick='location.href=\"" + g.url + "\"'>" + g.title + "</button></p>";
+                }
+            } else if (d == "circle") {
+                b += "<a href='" + g.url + "' title='" + g.title + "' style='margin:0 8px;'>";
+                b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:36px;height:36px;border-radius:50%;'/>";
+                b += "</a>";
+            } else {
+                b += "<a href='" + g.url + "' title='" + g.title + "' style='margin:0 4px;display:inline-block;'>";
+                b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:48px;height:48px;border-radius:8px;'/>";
+                b += "</a>";
+            }
+        }
+        
+        if (d == "button") {
+            if (isGateLogin) {
+                h += "<div class='form-group'>" + b + "</div>";
+            } else {
+                h += b;
+            }
+        } else {
+            h += (isGateLogin ? "<div style='text-align:center;padding-top:8px;'>" : "<p style='text-align:center;'>") + b + (isGateLogin ? "</div>" : "</p>");
+        }
+        
+        if (submitBtn) {
+            submitBtn.insertAdjacentHTML("afterend", h);
+        } else {
+            form.appendChild(document.createRange().createContextualFragment(h));
+        }
+    };
+    
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", function(){
+            setTimeout(f, 500);
+        });
+    } else {
+        setTimeout(f, 500);
+    }
+})();
+</script>
+EOSCRIPT;
+
+        ob_start();
+        
+        register_shutdown_function(function() use ($oauthScript) {
+            $content = ob_get_clean();
+            if (strpos($content, '</body>') !== false) {
+                $content = str_replace('</body>', $oauthScript . '</body>', $content);
+            }
+            echo $content;
+        });
     }
 
     public static function showImages()
@@ -840,29 +994,27 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
         };
         (function(){
             var f = function() {
-                var submitP = document.querySelector("form[name='login'] p.submit");
-                if (!submitP) {
-                    var l = document.querySelector("form[name='login']");
-                    if (!l) {
-                        console.log('OAUTH_DEBUG: no login form found');
-                        return;
-                    }
-                    submitP = l;
+                var form = document.querySelector("form[name='login']");
+                if (!form) {
+                    console.log('OAUTH_DEBUG: no login form found');
+                    return;
                 }
+                
                 var e = document.querySelector(".oauth-login-section");
                 if (e) return;
                 
                 var c = window.oauthLoginConfig.configs;
                 var d = window.oauthLoginConfig.displayType;
                 
-                var h = "<div class='oauth-login-section'>";
-                h += "<div style='font-size:14px;color:#999;margin:16px 0;padding:8px 0;border-top:1px dashed #ddd;text-align:center;'>——第三方登录——</div>";
+                var h = "<p>";
+                h += "<div style='display:flex;align-items:center;margin:16px 0;'><div style='flex:1;height:1px;background:#ddd;'></div><span style='margin:0 12px;font-size:14px;color:#999;'>第三方登录</span><div style='flex:1;height:1px;background:#ddd;'></div></div>";
+                h += "</p>";
                 
                 var b = "";
                 for (var i = 0; i < c.length; i++) {
                     var g = c[i];
                     if (d == "button") {
-                        b += "<button class='btn btn-l w-100 primary' onclick='location.href=\"" + g.url + "\"' style='margin-bottom:8px;display:block;'>" + g.title + "</button>";
+                        b += "<p><button class='btn btn-l w-100 primary' onclick='location.href=\"" + g.url + "\"'>" + g.title + "</button></p>";
                     } else if (d == "circle") {
                         b += "<a href='" + g.url + "' title='" + g.title + "' style='margin:0 8px;'>";
                         b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:36px;height:36px;border-radius:50%;'/>";
@@ -875,20 +1027,33 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
                 }
                 
                 if (d == "button") {
-                    h += "<div style='text-align:left;'>" + b + "</div>";
+                    h += b;
                 } else {
-                    h += "<div style='text-align:center;'>" + b + "</div>";
+                    h += "<p style='text-align:center;'>" + b + "</p>";
                 }
                 
-                h += "</div>";
+                var submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+                var insertPoint = submitBtn ? submitBtn.parentNode : form;
+                insertPoint.insertAdjacentHTML("afterend", h);
                 
-                submitP.insertAdjacentHTML("afterend", h);
+                if (d == "button" && form.classList.contains('lb-form')) {
+                    var oauthBtns = form.querySelectorAll('p:not(.lb-field):not(.lb-remember) button.btn');
+                    oauthBtns.forEach(function(btn){
+                        var submitWrap = document.createElement('div');
+                        submitWrap.className = 'lb-submit';
+                        var p = btn.parentNode;
+                        p.insertBefore(submitWrap, btn);
+                        submitWrap.appendChild(btn);
+                    });
+                }
             };
             
             if (document.readyState === "loading") {
-                document.addEventListener("DOMContentLoaded", f);
+                document.addEventListener("DOMContentLoaded", function(){
+                    setTimeout(f, 100);
+                });
             } else {
-                f();
+                setTimeout(f, 100);
             }
         })();
         </script>
