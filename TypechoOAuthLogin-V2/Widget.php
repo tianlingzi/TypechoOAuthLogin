@@ -48,14 +48,17 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
             $type = strtolower($type);
             $options = TypechoOAuthLogin_Plugin::options();
 
-            //判断登录方式是否支持
             if (!isset($options[$type])) {
                 throw new Typecho_Widget_Exception("暂不支持该登录方式! {$type}");
             }
 
-            //加载ThinkOauth类并实例化一个对象
             require_once 'ThinkOauth.php';
-            $sdk = ThinkOauth::getInstance($type);
+            try {
+                $sdk = ThinkOauth::getInstance($type);
+            } catch (Exception $e) {
+                error_log('OAuth初始化失败: ' . $e->getMessage());
+                throw new Typecho_Widget_Exception("OAuth初始化失败: " . $e->getMessage());
+            }
             /**
              * 来源页面放入session
              */
@@ -140,15 +143,12 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
             }
             //转小写
             $type = $this->auth['type'] = strtolower($this->auth['type']);
-            //加载ThinkOauth类并实例化一个对象
             require_once 'ThinkOauth.php';
             try {
                 $sdk = ThinkOauth::getInstance($type);
-                //请求接口(返回值包含openid)
                 $token = $sdk->getAccessToken($type, $code);
                 if (is_array($token)) {
-                    //获取第三方账号数据
-                    $user_info = $this->$type($token);
+                    $user_info = $this->getOAuthUserInfo($sdk, $type, $token);
                     
                     // 确保user_info是数组
                     if (!is_array($user_info)) {
@@ -734,43 +734,73 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
         }
     }
     
-    //登录成功，获取Custom Login用户信息
-    public function customlogin($token)
+    
+
+    /**
+     * 通用OAuth用户信息获取方法
+     * 自动调用SDK的getUserInfo()方法获取用户信息
+     * @param object $sdk SDK实例
+     * @param string $type OAuth类型
+     * @param array $token 访问令牌
+     * @return array 用户信息
+     */
+    public function getOAuthUserInfo($sdk, $type, $token)
     {
-        $customlogin = ThinkOauth::getInstance('customlogin', $token);
-        $data = $customlogin->getUserInfo();
+        try {
+            if (method_exists($sdk, 'getUserInfo')) {
+                $data = $sdk->getUserInfo();
+                
+                $userInfo = array(
+                    'name' => '',
+                    'nickname' => '',
+                    'head_img' => '',
+                    'gender' => 0
+                );
+                
+                if (!empty($data) && is_array($data)) {
+                    if (!empty($data['sub'])) {
+                        $userInfo['name'] = isset($data['preferred_username']) ? $data['preferred_username'] : (isset($data['username']) ? $data['username'] : $data['sub']);
+                        $userInfo['nickname'] = isset($data['name']) ? $data['name'] : (isset($data['nickname']) ? $data['nickname'] : $userInfo['name']);
+                        $userInfo['head_img'] = isset($data['picture']) ? $data['picture'] : (isset($data['avatar']) ? $data['avatar'] : (isset($data['avatar_url']) ? $data['avatar_url'] : ''));
+                        
+                        $gender = 0;
+                        if (isset($data['gender'])) {
+                            if (strtolower($data['gender']) == 'male') {
+                                $gender = 1;
+                            } elseif (strtolower($data['gender']) == 'female') {
+                                $gender = 2;
+                            }
+                        }
+                        $userInfo['gender'] = $gender;
+                    } elseif (!empty($data['id'])) {
+                        $userInfo['name'] = isset($data['login']) ? $data['login'] : (isset($data['username']) ? $data['username'] : $data['id']);
+                        $userInfo['nickname'] = isset($data['name']) ? $data['name'] : (isset($data['nickname']) ? $data['nickname'] : $userInfo['name']);
+                        $userInfo['head_img'] = isset($data['picture']) ? $data['picture'] : (isset($data['avatar']) ? $data['avatar'] : (isset($data['avatar_url']) ? $data['avatar_url'] : ''));
+                        $userInfo['gender'] = isset($data['gender']) ? (strtolower($data['gender']) == 'male' ? 1 : (strtolower($data['gender']) == 'female' ? 2 : 0)) : 0;
+                    }
+                    
+                    if (empty($userInfo['name'])) {
+                        $userInfo['name'] = $token['openid'];
+                        $userInfo['nickname'] = $token['openid'];
+                    }
+                }
+                
+                return $userInfo;
+            }
+        } catch (Exception $e) {
+            error_log('获取OAuth用户信息失败(' . $type . '): ' . $e->getMessage());
+        }
         
-        // 确保返回有效的用户信息数组
-        $userInfo = array(
-            'name' => '',
-            'nickname' => '',
+        if (method_exists($this, $type)) {
+            return $this->$type($token);
+        }
+        
+        return array(
+            'name' => $token['openid'],
+            'nickname' => $token['openid'],
             'head_img' => '',
             'gender' => 0
         );
-        
-        if (!empty($data['sub'])) {
-            $userInfo['name'] = isset($data['preferred_username']) ? $data['preferred_username'] : $data['sub'];
-            $userInfo['nickname'] = isset($data['name']) ? $data['name'] : $userInfo['name'];
-            $userInfo['head_img'] = isset($data['picture']) ? $data['picture'] : '';
-            
-            // 处理性别
-            $gender = 0;
-            if (isset($data['gender'])) {
-                if (strtolower($data['gender']) == 'male') {
-                    $gender = 1;
-                } elseif (strtolower($data['gender']) == 'female') {
-                    $gender = 2;
-                }
-            }
-            $userInfo['gender'] = $gender;
-        } else {
-            // 如果没有获取到用户信息，使用openid作为用户名和昵称
-            $userInfo['name'] = $token['openid'];
-            $userInfo['nickname'] = $token['openid'];
-            $this->widget('Widget_Notice')->set(array("获取Custom Login用户信息失败，使用openid作为用户名"), 'error');
-        }
-        
-        return $userInfo;
     }
 
 }

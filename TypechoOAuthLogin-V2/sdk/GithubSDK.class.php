@@ -84,4 +84,10 @@ class GithubSDK extends ThinkOauth
             throw new Exception('没有获取到 Github 用户ID！');
         }
     }
+    
+    public function getUserInfo()
+    {
+        $data = $this->call('user');
+        return $data;
+    }
 }

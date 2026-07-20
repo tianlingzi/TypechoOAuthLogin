@@ -78,4 +78,10 @@ class DiandianSDK extends ThinkOauth
             throw new Exception('没有获取到点点网用户ID！');
         }
     }
+    
+    public function getUserInfo()
+    {
+        $data = $this->call('user/info');
+        return $data;
+    }
 }

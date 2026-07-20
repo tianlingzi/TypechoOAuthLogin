@@ -77,20 +77,27 @@ abstract class ThinkOauth
      * 构造方法，配置应用信息
      * @param array $token
      */
-    public function __construct($token = null)
+    public function __construct($token = null, $type = null)
     {
-        //设置SDK类型
-        $class = get_class($this);
-        $this->Type = strtoupper(substr($class, 0, strlen($class)-3));
+        if ($type !== null) {
+            $this->Type = strtoupper($type);
+        } elseif (property_exists($this, 'type')) {
+            $this->Type = strtoupper($this->type);
+        } else {
+            $class = get_class($this);
+            $this->Type = strtoupper(substr($class, 0, strlen($class)-3));
+        }
+        
+        $typeLower = strtolower($this->Type);
 
-        //获取应用配置
-        $config = TypechoOAuthLogin_Plugin::options(strtolower($this->Type));
+        $config = TypechoOAuthLogin_Plugin::options($typeLower);
+        
         if (empty($config['id']) || empty($config['key'])) {
-            throw new Exception('请配置您申请的APP_KEY和APP_SECRET');
+            throw new Exception("请配置您申请的APP_KEY和APP_SECRET");
         } else {
             $this->AppKey    = $config['id'];
             $this->AppSecret = $config['key'];
-            $this->Token     = $token;		//设置获取到的TOKEN
+            $this->Token     = $token;
         }
     }
 
@@ -101,29 +108,116 @@ abstract class ThinkOauth
      */
     public static function getInstance($type, $token = null)
     {
-        $name = ucfirst(strtolower($type)) . 'SDK';
-        require_once "sdk/{$name}.class.php";
-        if (class_exists($name)) {
-            return new $name($token);
-        } else {
-            //类不存在
-            return false;
+        $typeLower = strtolower($type);
+        $sdkDir = __DIR__ . DIRECTORY_SEPARATOR . 'sdk';
+        
+        $sdkFiles = glob($sdkDir . DIRECTORY_SEPARATOR . '*.class.php');
+        if (empty($sdkFiles)) {
+            throw new Exception('SDK目录为空: ' . $sdkDir);
         }
+        
+        $foundFilePath = null;
+        
+        foreach ($sdkFiles as $file) {
+            $fileName = basename($file, '.class.php');
+            $fileTypeLower = strtolower(str_replace('SDK', '', $fileName));
+            
+            if ($fileTypeLower === $typeLower) {
+                $foundFilePath = $file;
+                break;
+            }
+        }
+        
+        if ($foundFilePath === null) {
+            foreach ($sdkFiles as $file) {
+                $content = file_get_contents($file);
+                if (preg_match('/protected\s+\$type\s*=\s*[\'"]([^\'"]+)[\'"]/', $content, $matches)) {
+                    $customType = strtolower($matches[1]);
+                    if ($customType === $typeLower) {
+                        $foundFilePath = $file;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if ($foundFilePath === null) {
+            $existingSDKs = array();
+            foreach ($sdkFiles as $file) {
+                $fileName = basename($file, '.class.php');
+                $fileTypeLower = strtolower(str_replace('SDK', '', $fileName));
+                $existingSDKs[] = $fileTypeLower;
+            }
+            throw new Exception('未找到匹配的SDK文件，类型: ' . $typeLower . '，可用的SDK: ' . implode(', ', $existingSDKs));
+        }
+        
+        $classesBefore = get_declared_classes();
+        require_once $foundFilePath;
+        $classesAfter = get_declared_classes();
+        
+        $newClasses = array_diff($classesAfter, $classesBefore);
+        
+        foreach ($newClasses as $className) {
+            if (class_exists($className)) {
+                try {
+                    $reflection = new ReflectionClass($className);
+                    if ($reflection->isSubclassOf('ThinkOauth')) {
+                        $class = new $className($token, $typeLower);
+                        $class->Type = strtoupper($typeLower);
+                        return $class;
+                    }
+                } catch (ReflectionException $e) {
+                    continue;
+                }
+            }
+        }
+        
+        foreach ($classesAfter as $className) {
+            if (class_exists($className)) {
+                try {
+                    $reflection = new ReflectionClass($className);
+                    if ($reflection->isSubclassOf('ThinkOauth')) {
+                        $hasDisplay = property_exists($className, 'displayName');
+                        $isAbstract = $reflection->isAbstract();
+                        if (!$isAbstract && $hasDisplay) {
+                            $class = new $className($token, $typeLower);
+                            $class->Type = strtoupper($typeLower);
+                            return $class;
+                        }
+                    }
+                } catch (ReflectionException $e) {
+                    continue;
+                }
+            }
+        }
+        
+        throw new Exception('SDK文件 ' . $foundFilePath . ' 中未找到 ThinkOauth 子类');
     }
     /**
      * 初始化配置
      */
     private function config()
     {
-        $configAll = require_once 'config.php';
-        $config = $configAll["THINK_SDK_{$this->Type}"];
-        if (!empty($config['AUTHORIZE'])) {
-            $this->Authorize = $config['AUTHORIZE'];
+        $configPath = __DIR__ . DIRECTORY_SEPARATOR . 'config.php';
+        if (!file_exists($configPath)) {
+            throw new Exception('配置文件不存在: ' . $configPath);
         }
-        if (!empty($config['CALLBACK'])) {
-            $this->Callback = $config['CALLBACK'];
+        $configAll = require_once $configPath;
+        $configKey = "THINK_SDK_{$this->Type}";
+        
+        if (isset($configAll[$configKey])) {
+            $config = $configAll[$configKey];
+            if (!empty($config['AUTHORIZE'])) {
+                $this->Authorize = $config['AUTHORIZE'];
+            }
+            if (!empty($config['CALLBACK'])) {
+                $this->Callback = $config['CALLBACK'];
+            } else {
+                throw new Exception('请配置回调页面地址');
+            }
         } else {
-            throw new Exception('请配置回调页面地址');
+            $callbackUrl = Typecho_Common::url('/oauth_callback?type=' . strtolower($this->Type), Typecho_Widget::Widget('Widget_Options')->index);
+            $this->Callback = $callbackUrl;
         }
     }
     /**
@@ -226,8 +320,8 @@ abstract class ThinkOauth
         $opts = array(
             CURLOPT_TIMEOUT        => 30,
             CURLOPT_RETURNTRANSFER => 1,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER     => $header
         );
 
@@ -275,4 +369,29 @@ abstract class ThinkOauth
      * 获取当前授权用户的SNS标识
      */
     abstract public function openid();
+
+    /**
+     * 获取用户信息
+     * 子类可以重写此方法来提供特定平台的用户信息
+     * @return array 用户信息数组，包含name, nickname, head_img, gender字段
+     */
+    public function getUserInfo()
+    {
+        $userInfo = array(
+            'name' => '',
+            'nickname' => '',
+            'head_img' => '',
+            'gender' => 0
+        );
+        
+        try {
+            $openid = $this->openid();
+            $userInfo['name'] = $openid;
+            $userInfo['nickname'] = $openid;
+        } catch (Exception $e) {
+            error_log('获取用户信息失败: ' . $e->getMessage());
+        }
+        
+        return $userInfo;
+    }
 }

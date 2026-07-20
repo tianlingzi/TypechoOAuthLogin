@@ -84,4 +84,10 @@ class WechatSDK extends ThinkOauth
             throw new Exception('没有获取到openid！');
         }
     }
+    
+    public function getUserInfo()
+    {
+        $data = $this->call('sns/userinfo');
+        return $data;
+    }
 }

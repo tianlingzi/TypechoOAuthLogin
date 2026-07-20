@@ -82,4 +82,10 @@ class BaiduSDK extends ThinkOauth
             throw new Exception('没有获取到百度用户ID！');
         }
     }
+    
+    public function getUserInfo()
+    {
+        $data = $this->call('passport/users/getLoggedInUser');
+        return $data;
+    }
 }

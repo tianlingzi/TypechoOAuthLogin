@@ -6,7 +6,7 @@ if (!defined('__TYPECHO_ROOT_DIR__')) {
  *
  * @package TypechoOAuthLogin
  * @author tianlingzi
- * @version 2.0.0
+ * @version 2.1.0
  * @link https://www.tianlingzi.top/archives/273/
  *
  */
@@ -44,6 +44,54 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
         Helper::removeRoute('connect_clear_table');
         Helper::removeRoute('connect_remove_table');
         return _t('插件已禁用，数据表已保留');
+    }
+
+    public static function getProviders()
+    {
+        $providers = array(
+            'qq' => '腾讯QQ',
+            'wechat' => '微信',
+            'github' => 'Github',
+            'msn' => 'MSN',
+            'google' => 'Google',
+            'sina' => '新浪微博',
+            'douban' => '豆瓣',
+            'diandian' => '点点',
+            'taobao' => '淘宝网',
+            'baidu' => '百度'
+        );
+
+        $sdkDir = __DIR__ . '/sdk';
+        if (is_dir($sdkDir)) {
+            $files = scandir($sdkDir);
+            foreach ($files as $file) {
+                if (preg_match('/^([A-Za-z]+)SDK\.class\.php$/', $file, $matches)) {
+                    $type = strtolower($matches[1]);
+                    $classPath = $sdkDir . '/' . $file;
+                    
+                    if (file_exists($classPath)) {
+                        $content = file_get_contents($classPath);
+                        
+                        $customType = null;
+                        if (preg_match('/protected\s+\$type\s*=\s*[\'"]([^\'"]+)[\'"]/', $content, $typeMatches)) {
+                            $customType = strtolower($typeMatches[1]);
+                        }
+                        
+                        $finalType = $customType !== null ? $customType : $type;
+                        
+                        if (!isset($providers[$finalType])) {
+                            $displayName = ucfirst($matches[1]);
+                            if (preg_match('/protected\s+\$displayName\s*=\s*[\'"]([^\'"]+)[\'"]/', $content, $displayMatches)) {
+                                $displayName = $displayMatches[1];
+                            }
+                            $providers[$finalType] = $displayName;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $providers;
     }
 
     public static function config(Typecho_Widget_Helper_Form $form)
@@ -90,19 +138,7 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
         $oauthConfig->input->setAttribute('style', 'display:none;');
         $form->addInput($oauthConfig);
 
-        $providers = array(
-            'qq' => '腾讯QQ',
-            'wechat' => '微信',
-            'github' => 'Github',
-            'msn' => 'MSN',
-            'google' => 'Google',
-            'sina' => '新浪微博',
-            'douban' => '豆瓣',
-            'diandian' => '点点',
-            'taobao' => '淘宝网',
-            'baidu' => '百度',
-            'customlogin' => '自定义OAuth/OIDC'
-        );
+        $providers = self::getProviders();
 
         $configs = array();
         if (!empty($savedConfig)) {
@@ -362,13 +398,13 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
             document.addEventListener("DOMContentLoaded", function() {
                 oauthUpdateCallbackUrls();
                 oauthSerializeConfig();
-                
-                var form = document.querySelector("form");
-                if (form) {
-                    form.addEventListener("submit", function(event) {
-                        oauthSerializeConfig();
-                    }, false);
-                }
+            });
+            
+            var forms = document.querySelectorAll("form");
+            forms.forEach(function(form) {
+                form.addEventListener("submit", function(event) {
+                    oauthSerializeConfig();
+                }, false);
             });
             
             window.oauthSerializeConfig = oauthSerializeConfig;

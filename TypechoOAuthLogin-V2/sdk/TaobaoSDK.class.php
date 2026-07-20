@@ -80,4 +80,11 @@ class TaobaoSDK extends ThinkOauth
             throw new Exception('没有获取到淘宝网用户ID！');
         }
     }
+    
+    public function getUserInfo()
+    {
+        $fields = 'user_id,nick,sex,buyer_credit,avatar,has_shop,vip_info';
+        $data = $this->call('taobao.user.buyer.get', "fields={$fields}");
+        return $data;
+    }
 }

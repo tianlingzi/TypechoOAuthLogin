@@ -95,4 +95,10 @@ class QqSDK extends ThinkOauth
             throw new Exception('没有获取到openid！');
         }
     }
+    
+    public function getUserInfo()
+    {
+        $data = $this->call('user/get_user_info');
+        return $data;
+    }
 }

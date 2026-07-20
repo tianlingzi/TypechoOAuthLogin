@@ -76,4 +76,10 @@ class DoubanSDK extends ThinkOauth
             throw new Exception('没有获取到豆瓣用户ID！');
         }
     }
+    
+    public function getUserInfo()
+    {
+        $data = $this->call('user/~me');
+        return $data;
+    }
 }

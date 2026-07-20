@@ -79,4 +79,10 @@ class SinaSDK extends ThinkOauth
             throw new Exception('没有获取到新浪微博用户ID！');
         }
     }
+    
+    public function getUserInfo()
+    {
+        $data = $this->call('users/show.json');
+        return $data;
+    }
 }

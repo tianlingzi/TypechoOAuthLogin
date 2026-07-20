@@ -27,7 +27,6 @@ $brandColors = array(
     'douban' => '#2AA515',
     'taobao' => '#FF6A00',
     'diandian' => '#0B76FF',
-    'customlogin' => '#667eea',
 );
 $indexUrl = $this->options->index;
 ?>

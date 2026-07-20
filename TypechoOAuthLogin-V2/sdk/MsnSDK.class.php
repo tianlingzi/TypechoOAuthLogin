@@ -88,4 +88,10 @@ class MsnSDK extends ThinkOauth
             throw new Exception('没有获取到 MSN 用户ID！');
         }
     }
+    
+    public function getUserInfo()
+    {
+        $data = $this->call('me');
+        return $data;
+    }
 }

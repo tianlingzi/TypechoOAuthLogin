@@ -41,10 +41,5 @@ return array(
         'NAME'      => '百度',
         'CALLBACK'      => URL_CALLBACK . 'baidu',
     ),
-    'THINK_SDK_CUSTOMLOGIN' => array(
-        'NAME'      => 'Custom Login',
-        'CALLBACK'      => URL_CALLBACK . 'customlogin',
-        'AUTHORIZE'     => 'scope=openid profile email',
-    ),
 
 );

@@ -22,33 +22,45 @@ typecho第三方OAuth登录插件
 
 # 功能介绍
 
-**Typecho互联登录插件，目前已支持的第三方登录：QQ/微信/Github/Msn/Google/新浪微博/豆瓣/点点/淘宝网/百度/通用OAuth2.0/OIDC登录。**
+**Typecho互联登录插件，目前已支持的第三方登录：QQ/微信/Github/Msn/Google/新浪微博/豆瓣/点点/淘宝网/百度/通用OAuth2.0/OIDC登录（Keycloak、Authentik、Authelia等）。**
 后续会根据实际需要继续添加新的第三方接口，欢迎大家一起贡献。
 如使用过程中遇到问题，可到这篇文章下留言，我会尽快解决。 <https://www.tianlingzi.top/archives/273/>
 
 ***
 
-# 适用于V1版本
-## 二、插件下载
+# 插件下载
 
 <https://github.com/tianlingzi/TypechoOAuthLogin/releases>
 
 ***
-
-## 三、安装步骤
+# 安装步骤
 
 1. 下载本仓库文件；
 2. 将对应版本的插件文件夹“TypechoOAuthLogin-V*”复制到`Plugins`目录；
 3. 将文件名改为“TypechoOAuthLogin”；
 4. 在后台启用插件，并配置插件参数（方法见：参数配置 - 配置示例）；
-5. 在当前使用主题的适当位置添加`TypechoOAuthLogin_Plugin::show()`方法，代码：
+
+# V2版本使用说明
+## 一、使用方法
+### 第三方登录配置
+在插件设置中，添加“第三方登录配置”：平台类型、显示名称（仅按钮样式生效）、Client ID、Client Secret、是否启用等参数。
+
+### 添加自定义的通用OAuth2.0/OIDC登录配置
+1. 进入SDK目录，其中的“TemplateSDK.class.php"文件复制一份，并重命名为：”{平台类型拼音}SDK.class.php"。如：AuthentikSDK.class.php;
+2. 修改AuthentikSDK.class.php文件中的`displayName`和`OpenIDConfiguration`对应的参数;
+3. 重新进入插件设置，即可自动识别出新的平台类型。
+4. 同一类型平台只能有一条配置起作用。对于有多个自定义的第三方平台，需要设置不同的SDK以及平台名称。
+
+# V1版本使用说明
+## 一、使用方法
+1. 在当前使用主题的适当位置添加`TypechoOAuthLogin_Plugin::show()`方法，代码：
 
 ```php
 <?php TypechoOAuthLogin_Plugin::show(); ?>
 ```
 
-1. 在第三方平台设置网站回调域，注意区分http、https（方法见：参数配置 - 配置示例）。
-2. 如果您的主题开启了全站PJAX，需要把以下代码放入PJAX回调函数内：
+2. 在第三方平台设置网站回调域，注意区分http、https（方法见：参数配置 - 配置示例）。
+3. 如果您的主题开启了全站PJAX，需要把以下代码放入PJAX回调函数内：
 
 ```
 /*PJAX时：来源页写入cookie*/
@@ -59,7 +71,7 @@ document.cookie = "TypechoOAuthLogin_Referer=" + encodeURI(window.location.href)
 
 ***
 
-## 三、参数配置
+## 二、参数配置
 
 ### 配置示例
 
@@ -100,6 +112,6 @@ document.cookie = "TypechoOAuthLogin_Referer=" + encodeURI(window.location.href)
 以本博客`www.tianlingzi.top`,设置QQ登录，为例：
 复制插件中给出的回调地址：`https://www.tianlingzi.top/oauth_callback?type=qq`
 
-## 四、管理页面
+## 三、管理页面
 
 在后台的“个人设置”页面中可以看到TypechoOAuthLogin设置，点击“管理第三方登录信息”即可进入。

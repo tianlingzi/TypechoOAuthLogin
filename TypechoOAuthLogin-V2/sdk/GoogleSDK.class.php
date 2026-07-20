@@ -87,4 +87,10 @@ class GoogleSDK extends ThinkOauth
             throw new Exception('没有获取到 Google 用户ID！');
         }
     }
+    
+    public function getUserInfo()
+    {
+        $data = $this->call('userinfo');
+        return $data;
+    }
 }
