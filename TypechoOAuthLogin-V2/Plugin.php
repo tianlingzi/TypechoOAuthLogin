@@ -759,11 +759,11 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
                         b += "<p><button class='btn btn-l w-100 primary' onclick='location.href=\"" + g.url + "\"'>" + g.title + "</button></p>";
                     } else if (d == "circle") {
                         b += "<a href='" + g.url + "' title='" + g.title + "' style='margin:0 8px;'>";
-                        b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:36px;height:36px;border-radius:50%;'/>";
+                        b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/icon_" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:35px;height:35px;border-radius:50%;'/>";
                         b += "</a>";
                     } else {
                         b += "<a href='" + g.url + "' title='" + g.title + "' style='margin:0 4px;display:inline-block;'>";
-                        b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:48px;height:48px;border-radius:8px;'/>";
+                        b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:76px;height:24px;border-radius:8px;'/>";
                         b += "</a>";
                     }
                 }
@@ -897,11 +897,11 @@ window.oauthLoginConfig = {
                 }
             } else if (d == "circle") {
                 b += "<a href='" + g.url + "' title='" + g.title + "' style='margin:0 8px;'>";
-                b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:36px;height:36px;border-radius:50%;'/>";
+                b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/icon_" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:35px;height:35px;border-radius:50%;'/>";
                 b += "</a>";
             } else {
                 b += "<a href='" + g.url + "' title='" + g.title + "' style='margin:0 4px;display:inline-block;'>";
-                b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:48px;height:48px;border-radius:8px;'/>";
+                b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:76px;height:24px;border-radius:8px;'/>";
                 b += "</a>";
             }
         }
@@ -956,7 +956,7 @@ EOSCRIPT;
         foreach ($list as $type => $v) {
             $url = Typecho_Common::url('/oauth?type=' . $type, Typecho_Widget::Widget('Widget_Options')->index);
             $html .= '<a href="' . $url . '" title="' . htmlspecialchars($v['title']) . '" style="margin: 0 8px;">';
-            $html .= '<img src="/usr/plugins/TypechoOAuthLogin/login_ico/' . $type . '.png" alt="' . htmlspecialchars($type . '-' . $v['title']) . '" style="width: 36px; height: 36px; border-radius: 50%;" />';
+            $html .= '<img src="/usr/plugins/TypechoOAuthLogin/login_ico/icon_' . $type . '.png" alt="' . htmlspecialchars($type . '-' . $v['title']) . '" style="width: 35px; height: 35px; border-radius: 50%;" />';
             $html .= '</a>';
         }
         $html .= '</div>';
@@ -1053,11 +1053,11 @@ EOSCRIPT;
                         b += "<p><button class='btn btn-l w-100 primary' onclick='location.href=\"" + g.url + "\"'>" + g.title + "</button></p>";
                     } else if (d == "circle") {
                         b += "<a href='" + g.url + "' title='" + g.title + "' style='margin:0 8px;'>";
-                        b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:36px;height:36px;border-radius:50%;'/>";
+                        b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/icon_" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:35px;height:35px;border-radius:50%;'/>";
                         b += "</a>";
                     } else {
                         b += "<a href='" + g.url + "' title='" + g.title + "' style='margin:0 4px;display:inline-block;'>";
-                        b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:48px;height:48px;border-radius:8px;'/>";
+                        b += "<img src='/usr/plugins/TypechoOAuthLogin/login_ico/" + g.type + ".png' alt='" + g.type + "-" + g.title + "' style='width:76px;height:24px;border-radius:8px;'/>";
                         b += "</a>";
                     }
                 }
