@@ -108,11 +108,11 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
         $displayType = new Typecho_Widget_Helper_Form_Element_Radio(
             'displayType',
             array(
-                'button' => _t('按钮样式'),
                 'circle' => _t('圆形图标'),
-                'rect' => _t('矩形图标')
+                'rect' => _t('矩形图标'),
+                'button' => _t('按钮样式')
             ),
-            'button',
+            'circle',
             _t('显示类型'),
             _t('选择自动插入登录页时的显示类型')
         );
@@ -222,8 +222,11 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
         echo '<h4 style="margin:0 0 10px 0;">' . _t('代码引用方式') . '</h4>';
         echo '<p style="color:#666;font-size:14px;margin:0;">';
         echo _t('在模板中引用第三方登录按钮：') . '<br/>';
-        echo _t('图片样式：') . '<code><?php TypechoOAuthLogin_Plugin::showImages(); ?></code><br/>';
-        echo _t('按钮样式：') . '<code><?php TypechoOAuthLogin_Plugin::showButtons(); ?></code><br/>';
+        echo _t('按钮样式：') . '<code>&lt;?php TypechoOAuthLogin_Plugin::showButtons(); ?&gt;</code><br/>';
+        echo _t('圆形图标：') . '<code>&lt;?php TypechoOAuthLogin_Plugin::showImages(); ?&gt;</code>';
+        echo '<span style="color:#999;font-size:12px;">' . _t('（图标文件：icon_XXX.png，尺寸 35×35）') . '</span><br/>';
+        echo _t('矩形图标：') . '<code>&lt;?php TypechoOAuthLogin_Plugin::showRectImages(); ?&gt;</code>';
+        echo '<span style="color:#999;font-size:12px;">' . _t('（图标文件：XXX.png，尺寸 76×24）') . '</span><br/>';
         echo '</p>';
         echo '</div>';
 
@@ -420,7 +423,7 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
                 var exportData = {
                     version: "2.0",
                     autoInsert: autoInsert ? autoInsert.value : "1",
-                    displayType: displayType ? displayType.value : "button",
+                    displayType: displayType ? displayType.value : "circle",
                     custom: custom ? custom.value : "1",
                     oauthConfig: JSON.parse(configData)
                 };
@@ -713,7 +716,7 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
 
         $displayType = $pluginOptions->displayType;
         if (empty($displayType)) {
-            $displayType = 'button';
+            $displayType = 'circle';
         }
 
         $siteUrl = Typecho_Widget::Widget('Widget_Options')->index;
@@ -824,7 +827,7 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
 
         $displayType = $pluginOptions->displayType;
         if (empty($displayType)) {
-            $displayType = 'button';
+            $displayType = 'circle';
         }
 
         $siteUrl = Typecho_Widget::Widget('Widget_Options')->index;
@@ -951,15 +954,29 @@ EOSCRIPT;
         if (empty($list)) {
             return '';
         }
-        $html = '<div style="margin-top: 16px; text-align: center;">';
-        $html .= '<div style="font-size: 14px; color: #999; margin-bottom: 12px; padding: 8px; border-top: 1px dashed #ddd;">——' . _t('第三方登录') . '——</div>';
+        $html = '';
         foreach ($list as $type => $v) {
             $url = Typecho_Common::url('/oauth?type=' . $type, Typecho_Widget::Widget('Widget_Options')->index);
             $html .= '<a href="' . $url . '" title="' . htmlspecialchars($v['title']) . '" style="margin: 0 8px;">';
             $html .= '<img src="/usr/plugins/TypechoOAuthLogin/login_ico/icon_' . $type . '.png" alt="' . htmlspecialchars($type . '-' . $v['title']) . '" style="width: 35px; height: 35px; border-radius: 50%;" />';
             $html .= '</a>';
         }
-        $html .= '</div>';
+        echo $html;
+    }
+
+    public static function showRectImages()
+    {
+        $list = self::options();
+        if (empty($list)) {
+            return '';
+        }
+        $html = '';
+        foreach ($list as $type => $v) {
+            $url = Typecho_Common::url('/oauth?type=' . $type, Typecho_Widget::Widget('Widget_Options')->index);
+            $html .= '<a href="' . $url . '" title="' . htmlspecialchars($v['title']) . '" style="margin: 0 4px; display: inline-block;">';
+            $html .= '<img src="/usr/plugins/TypechoOAuthLogin/login_ico/' . $type . '.png" alt="' . htmlspecialchars($type . '-' . $v['title']) . '" style="width: 76px; height: 24px; border-radius: 8px;" />';
+            $html .= '</a>';
+        }
         echo $html;
     }
 
@@ -969,23 +986,12 @@ EOSCRIPT;
         if (empty($list)) {
             return '';
         }
-        $html = '<div style="margin-top: 16px;">';
-        $html .= '<div style="font-size: 14px; color: #999; margin-bottom: 12px; padding: 8px; border-top: 1px dashed #ddd; text-align: center;">——' . _t('第三方登录') . '——</div>';
+        $html = '';
         foreach ($list as $type => $v) {
             $url = Typecho_Common::url('/oauth?type=' . $type, Typecho_Widget::Widget('Widget_Options')->index);
             $html .= '<a href="' . $url . '" class="btn btn-l w-100" style="margin-bottom: 8px; display: block;">' . htmlspecialchars($v['title']) . '</a>';
         }
-        $html .= '</div>';
         echo $html;
-    }
-
-    public static function show($text = false)
-    {
-        if ($text) {
-            self::showButtons();
-        } else {
-            self::showImages();
-        }
     }
 
     public static function injectFrontendLoginScript()
@@ -1007,7 +1013,7 @@ EOSCRIPT;
 
         $displayType = $pluginOptions->displayType;
         if (empty($displayType)) {
-            $displayType = 'button';
+            $displayType = 'circle';
         }
 
         $siteUrl = Typecho_Widget::Widget('Widget_Options')->index;

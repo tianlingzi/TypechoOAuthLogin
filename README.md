@@ -60,6 +60,23 @@ typecho第三方OAuth登录插件
 3. 矩形图标样式。一般为平台logo+文字名称。
 4. 圆形图标和矩形图标可自行更换，只需要按照平台名称：XXX。图标名称：icon_XXX.png、XXX.png，类似格式命名即可。
 
+### 代码引用
+#### 各个显示样式的代码引用如下：
+圆形图标样式
+```php
+<?php TypechoOAuthLogin_Plugin::showImages(); ?>
+```
+矩形图标样式
+```php
+<?php TypechoOAuthLogin_Plugin::showRectImages(); ?>
+```
+按钮样式
+```php
+<?php TypechoOAuthLogin_Plugin::showButtons(); ?>
+```
+
+#### 代码引用情况下，只会输出最简单的样式，只有图标、文本，没有其他元素。方便用户根据实际情况进行美化。
+
 # V1版本使用说明
 ## 一、使用方法
 1. 在当前使用主题的适当位置添加`TypechoOAuthLogin_Plugin::show()`方法，代码：
