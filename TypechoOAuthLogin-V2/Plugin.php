@@ -6,7 +6,7 @@ if (!defined('__TYPECHO_ROOT_DIR__')) {
  *
  * @package TypechoOAuthLogin
  * @author tianlingzi
- * @version 2.1.0
+ * @version 2.1.1
  * @link https://www.tianlingzi.top/archives/273/
  *
  */
@@ -48,6 +48,11 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
 
     public static function getProviders()
     {
+        static $cachedProviders = null;
+        if ($cachedProviders !== null) {
+            return $cachedProviders;
+        }
+
         $providers = array(
             'qq' => '腾讯QQ',
             'wechat' => '微信',
@@ -91,6 +96,7 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
             }
         }
 
+        $cachedProviders = $providers;
         return $providers;
     }
 
@@ -996,18 +1002,40 @@ EOSCRIPT;
 
     public static function injectFrontendLoginScript()
     {
-        echo '<!-- OAUTH_DEBUG: hook fired -->';
-        
+        // 1. 非 GET 请求（评论提交/搜索POST等）直接跳过
+        if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] !== 'GET') {
+            return;
+        }
+        // 2. AJAX 请求直接跳过
+        if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) 
+            && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+            return;
+        }
+        // 3. 请求路径明显为 feed/sitemap/robots 等非页面资源直接跳过
+        if (!empty($_SERVER['REQUEST_URI'])) {
+            $uri = $_SERVER['REQUEST_URI'];
+            if (preg_match('/\.(xml|rss|atom|txt|json|css|js|png|jpg|jpeg|gif|webp|ico|svg|woff2?|ttf|eot)$/i', $uri)) {
+                return;
+            }
+        }
+        // 4. 用户已经登录 → 前端页面不会展示登录表单，直接跳过
+        try {
+            $user = Typecho_Widget::Widget('Widget_User');
+            if ($user->hasLogin()) {
+                return;
+            }
+        } catch (Exception $e) {
+            // 忽略异常，继续执行
+        }
+
         $pluginOptions = Typecho_Widget::Widget('Widget_Options')->plugin('TypechoOAuthLogin');
         $autoInsert = $pluginOptions->autoInsert;
         if (!isset($autoInsert) || (int)$autoInsert !== 1) {
-            echo '<!-- OAUTH_DEBUG: autoInsert disabled -->';
             return;
         }
 
         $list = self::options();
         if (empty($list)) {
-            echo '<!-- OAUTH_DEBUG: no configs -->';
             return;
         }
 
@@ -1038,7 +1066,6 @@ EOSCRIPT;
             var f = function() {
                 var form = document.querySelector("form[name='login']");
                 if (!form) {
-                    console.log('OAUTH_DEBUG: no login form found');
                     return;
                 }
                 

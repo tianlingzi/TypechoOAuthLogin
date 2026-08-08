@@ -8,30 +8,12 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
     private $auth;
     private $oauth_user;
     private $referer = ''; // 来源页面
-    /**
-     * 风格目录
-     *
-     * @access private
-     * @var string
-     */
-    private $_themeDir;
 
     public function __construct($request, $response, $params = null)
     {
         parent::__construct($request, $response, $params);
         // 设置时区为北京时间，确保所有日期时间处理都使用正确的时区
         date_default_timezone_set('Asia/Shanghai');
-        
-        $this->_themeDir = rtrim($this->options->themeFile($this->options->theme), '/') . '/';
-
-        /** 初始化皮肤函数 */
-        $functionsFile = $this->_themeDir . 'functions.php';
-        if (file_exists($functionsFile)) {
-            require_once $functionsFile;
-            if (function_exists('themeInit')) {
-                themeInit($this);
-            }
-        }
     }
     /**
      * 获取Oauth登录地址，重定向
@@ -77,6 +59,8 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
                 // 站内来源页放入session
                 $_SESSION['typecho_OAuth_Login_Referer'] = $this->referer;
             }
+
+            session_write_close();
             //302重定向
             $this->response->redirect($sdk->getRequestCodeURL($type));
         }
@@ -121,6 +105,8 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
                 unset($_SESSION['__typecho_auth']);
                 unset($_SESSION['__typecho_oauth_user']);
                 
+                session_write_close();
+                
                 $redirect = empty($this->referer) ? $this->options->index : $this->referer;
                 $manage = Typecho_Common::url('/connect/manage', $this->options->index);
                 if (0 === strpos($redirect, $manage)) {
@@ -143,6 +129,9 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
             }
             //转小写
             $type = $this->auth['type'] = strtolower($this->auth['type']);
+            
+            session_write_close();
+            
             require_once 'ThinkOauth.php';
             try {
                 $sdk = ThinkOauth::getInstance($type);
@@ -250,10 +239,14 @@ class TypechoOAuthLogin_Widget extends Widget_Abstract_Users
                 }
                 $this->response->redirect($redirect);
             } else {
-                //用户绑定界面
                 if (!isset($_SESSION['__typecho_auth'])) {
+                    if (session_status() != PHP_SESSION_ACTIVE) {
+                        session_start();
+                    }
                     $_SESSION['__typecho_auth'] = $this->auth;
                     $_SESSION['__typecho_oauth_user'] = $oauth_user;
+
+                    session_write_close();
                 }
                 //未绑定，引导用户到绑定界面
                 $this->render('callback.php');

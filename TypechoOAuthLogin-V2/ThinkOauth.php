@@ -108,60 +108,44 @@ abstract class ThinkOauth
      */
     public static function getInstance($type, $token = null)
     {
+        static $sdkMap = null;
         $typeLower = strtolower($type);
-        $sdkDir = __DIR__ . DIRECTORY_SEPARATOR . 'sdk';
         
-        $sdkFiles = glob($sdkDir . DIRECTORY_SEPARATOR . '*.class.php');
-        if (empty($sdkFiles)) {
-            throw new Exception('SDK目录为空: ' . $sdkDir);
+        if ($sdkMap === null) {
+            $sdkMap = self::buildSdkMap();
+        }
+
+        if (!isset($sdkMap[$typeLower])) {
+            $existing = empty($sdkMap) ? array() : array_keys($sdkMap);
+            throw new Exception('未找到匹配的SDK文件，类型: ' . $typeLower . '，可用的SDK: ' . implode(', ', $existing));
         }
         
-        $foundFilePath = null;
+        $foundFilePath = $sdkMap[$typeLower]['file'];
+        $guessClassName = $sdkMap[$typeLower]['class'];
         
-        foreach ($sdkFiles as $file) {
-            $fileName = basename($file, '.class.php');
-            $fileTypeLower = strtolower(str_replace('SDK', '', $fileName));
-            
-            if ($fileTypeLower === $typeLower) {
-                $foundFilePath = $file;
-                break;
-            }
+        if (!class_exists($guessClassName, false)) {
+            require_once $foundFilePath;
         }
         
-        if ($foundFilePath === null) {
-            foreach ($sdkFiles as $file) {
-                $content = file_get_contents($file);
-                if (preg_match('/protected\s+\$type\s*=\s*[\'"]([^\'"]+)[\'"]/', $content, $matches)) {
-                    $customType = strtolower($matches[1]);
-                    if ($customType === $typeLower) {
-                        $foundFilePath = $file;
-                        break;
-                    }
+        if (class_exists($guessClassName)) {
+            try {
+                $reflection = new ReflectionClass($guessClassName);
+                if ($reflection->isSubclassOf('ThinkOauth') && !$reflection->isAbstract()) {
+                    $class = new $guessClassName($token, $typeLower);
+                    $class->Type = strtoupper($typeLower);
+                    return $class;
                 }
+            } catch (ReflectionException $e) {
+                // 走fallback
             }
         }
         
-        if ($foundFilePath === null) {
-            $existingSDKs = array();
-            foreach ($sdkFiles as $file) {
-                $fileName = basename($file, '.class.php');
-                $fileTypeLower = strtolower(str_replace('SDK', '', $fileName));
-                $existingSDKs[] = $fileTypeLower;
-            }
-            throw new Exception('未找到匹配的SDK文件，类型: ' . $typeLower . '，可用的SDK: ' . implode(', ', $existingSDKs));
-        }
-        
-        $classesBefore = get_declared_classes();
-        require_once $foundFilePath;
         $classesAfter = get_declared_classes();
-        
-        $newClasses = array_diff($classesAfter, $classesBefore);
-        
-        foreach ($newClasses as $className) {
+        foreach ($classesAfter as $className) {
             if (class_exists($className)) {
                 try {
                     $reflection = new ReflectionClass($className);
-                    if ($reflection->isSubclassOf('ThinkOauth')) {
+                    if ($reflection->isSubclassOf('ThinkOauth') && !$reflection->isAbstract()) {
                         $class = new $className($token, $typeLower);
                         $class->Type = strtoupper($typeLower);
                         return $class;
@@ -172,26 +156,42 @@ abstract class ThinkOauth
             }
         }
         
-        foreach ($classesAfter as $className) {
-            if (class_exists($className)) {
-                try {
-                    $reflection = new ReflectionClass($className);
-                    if ($reflection->isSubclassOf('ThinkOauth')) {
-                        $hasDisplay = property_exists($className, 'displayName');
-                        $isAbstract = $reflection->isAbstract();
-                        if (!$isAbstract && $hasDisplay) {
-                            $class = new $className($token, $typeLower);
-                            $class->Type = strtoupper($typeLower);
-                            return $class;
-                        }
-                    }
-                } catch (ReflectionException $e) {
-                    continue;
-                }
+        throw new Exception('SDK文件 ' . $foundFilePath . ' 中未找到 ThinkOauth 子类');
+    }
+    
+    private static function buildSdkMap()
+    {
+        $sdkDir = __DIR__ . DIRECTORY_SEPARATOR . 'sdk';
+        $map = array();
+        
+        $sdkFiles = glob($sdkDir . DIRECTORY_SEPARATOR . '*.class.php');
+        if (empty($sdkFiles)) {
+            return $map;
+        }
+        
+        foreach ($sdkFiles as $file) {
+            $fileName = basename($file, '.class.php'); // 如 "QqSDK"
+            $className = $fileName;                    // 类名通常等于文件名
+            $fileTypeLower = strtolower(str_replace('SDK', '', $fileName)); // "qq"
+            
+            // 优先用文件名推导的 type
+            $type = $fileTypeLower;
+            
+            // 读取文件检查自定义 $type 属性
+            $content = file_get_contents($file);
+            if (preg_match('/protected\s+\$type\s*=\s*[\'"]([^\'"]+)[\'"]/', $content, $matches)) {
+                $type = strtolower($matches[1]);
+            }
+            
+            if (!isset($map[$type])) {
+                $map[$type] = array(
+                    'file'  => $file,
+                    'class' => $className
+                );
             }
         }
         
-        throw new Exception('SDK文件 ' . $foundFilePath . ' 中未找到 ThinkOauth 子类');
+        return $map;
     }
     /**
      * 初始化配置

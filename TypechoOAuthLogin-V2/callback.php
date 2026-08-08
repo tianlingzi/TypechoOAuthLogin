@@ -26,7 +26,7 @@
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background-color: #f0f4f8;
-            background-image: url('https://bing.img.run/1920x1080.php');
+            background-image: url('https://www.tianlingzi.top/bing/1920x1080.php');
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
