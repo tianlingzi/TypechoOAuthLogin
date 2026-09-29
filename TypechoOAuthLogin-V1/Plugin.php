@@ -6,7 +6,7 @@ if (!defined('__TYPECHO_ROOT_DIR__')) {
  *
  * @package TypechoOAuthLogin
  * @author tianlingzi
- * @version 4.2
+ * @version 1.4.3
  * @link https://www.tianlingzi.top/archives/262/
  *
  */
@@ -207,7 +207,7 @@ class TypechoOAuthLogin_Plugin implements Typecho_Plugin_Interface
         $db = Typecho_Db::get();
         $prefix = $db->getPrefix();
         // 仅支持MySQL 适配器
-        if (!in_array($db->getAdapterName(), array('Pdo_Mysql', 'Mysql'))) {
+        if (stripos($db->getAdapterName(), 'mysql') === false) {
             throw new Typecho_Plugin_Exception(_t('对不起, 本插件仅支持MySQL数据库。'));
         }
         try {
