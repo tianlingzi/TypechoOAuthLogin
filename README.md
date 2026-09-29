@@ -30,45 +30,59 @@ typecho第三方OAuth登录插件
 <https://github.com/tianlingzi/TypechoOAuthLogin/releases>
 
 ***
+
 # 安装步骤
 
 1. 下载本仓库文件；
-2. 将对应版本的插件文件夹“TypechoOAuthLogin-V*”复制到`Plugins`目录；
+2. 将对应版本的插件文件夹“TypechoOAuthLogin-V\*”复制到`Plugins`目录；
 3. 将文件名改为“TypechoOAuthLogin”；
 4. 在后台启用插件，并配置插件参数（方法见：参数配置 - 配置示例）；
 5. 如果是从V1升级到V2，需要提前把代码引用的代码改成V2的代码引用，或者删除。否则系统会报错。
 
 # V2版本使用说明
+
 ## 一、使用方法
+
 ### 第三方登录配置
+
 在插件设置中，添加“第三方登录配置”：平台类型、显示名称（仅按钮样式生效）、Client ID、Client Secret、是否启用等参数。
 
 ### 添加自定义的通用OAuth2.0/OIDC登录配置
+
 1. 进入SDK目录，其中的“TemplateSDK.class.php"文件复制一份，并重命名为：”{平台类型拼音}SDK.class.php"。如：AuthentikSDK.class.php;
 2. 修改AuthentikSDK.class.php文件中的`displayName`和`OpenIDConfiguration`对应的参数;
 3. 重新进入插件设置，即可自动识别出新的平台类型。
 4. 同一类型平台只能有一条配置起作用。对于有多个自定义的第三方平台，需要设置不同的SDK以及平台名称。
 
 ### 自动插入说明
+
 1. 由于插件是使用钩子自动插入，因此插件的加载顺序要在美化插件之前（即：先启用本插件，再启用美化插件）。
 
 ### 显示格式
-1. 默认为按钮样式。
-2. 圆形图标样式。仅平台logo。
+
+1. 默认为圆形图标样式。仅平台logo。
+2. 按钮样式。长方形按钮+文字（由于各美化主题的标签不同，会导致按钮的样式千奇百怪，慎用）
 3. 矩形图标样式。一般为平台logo+文字名称。
-4. 圆形图标和矩形图标可自行更换，只需要按照平台名称：XXX。图标名称：icon_XXX.png、XXX.png，类似格式命名即可。
+4. 圆形图标和矩形图标可自行更换，只需要按照平台名称：XXX。图标名称：icon\_XXX.png、XXX.png，类似格式命名即可。
 
 ### 代码引用
+
 #### 各个显示样式的代码引用如下：
+
 圆形图标样式
+
 ```php
 <?php TypechoOAuthLogin_Plugin::showImages(); ?>
 ```
+
 矩形图标样式
+
 ```php
 <?php TypechoOAuthLogin_Plugin::showRectImages(); ?>
 ```
+
 按钮样式
+
 ```php
 <?php TypechoOAuthLogin_Plugin::showButtons(); ?>
 ```
@@ -76,15 +90,17 @@ typecho第三方OAuth登录插件
 #### 代码引用情况下，只会输出最简单的样式，只有图标、文本，没有其他元素。方便用户根据实际情况进行美化。
 
 # V1版本使用说明
+
 ## 一、使用方法
+
 1. 在当前使用主题的适当位置添加`TypechoOAuthLogin_Plugin::show()`方法，代码：
 
 ```php
 <?php TypechoOAuthLogin_Plugin::show(); ?>
 ```
 
-2. 在第三方平台设置网站回调域，注意区分http、https（方法见：参数配置 - 配置示例）。
-3. 如果您的主题开启了全站PJAX，需要把以下代码放入PJAX回调函数内：
+1. 在第三方平台设置网站回调域，注意区分http、https（方法见：参数配置 - 配置示例）。
+2. 如果您的主题开启了全站PJAX，需要把以下代码放入PJAX回调函数内：
 
 ```
 /*PJAX时：来源页写入cookie*/
